@@ -1,6 +1,7 @@
 from automation.config.database import SessionLocal
 from automation.models.subreddit import Subreddit
 from automation.models.lead_posts import LeadPost
+from automation.utils.logger import add_log
 from datetime import datetime
 
 
@@ -18,11 +19,13 @@ def fetch_subreddits():
         ]
 
         print("DB task: ", allowed_monitored_subreddites)
-
+        add_log("DB_FETCH_SUBREDDITS", f"Fetched {len(allowed_monitored_subreddites)} active subreddits", "success")
         return allowed_monitored_subreddites
     except Exception as e:
         db.rollback()
         print(e)
+        add_log("DB_ERROR", f"fetch_subreddits failed: {str(e)}", "error")
+        return []
     finally:
         db.close()
 
@@ -30,6 +33,7 @@ def fetch_subreddits():
 def store_lead_posts(lead_posts):
 
     db = SessionLocal()
+    add_log("DB_STORE_LEADS_START", f"Starting insertion of {len(lead_posts)} new leads", "info")
 
     try:
 
@@ -61,10 +65,12 @@ def store_lead_posts(lead_posts):
             db.add(lead_post)
 
         db.commit()
+        add_log("DB_STORE_LEADS_SUCCESS", "Successfully committed valid leads to DB", "success")
 
     except Exception as e:
         db.rollback()
         print(e)
+        add_log("DB_ERROR", f"store_lead_posts failed: {str(e)}", "error")
 
     finally:
         db.close()

@@ -334,15 +334,13 @@ linux:autonova-bot:v1.0 (by u/username)
 
 ## E1. Event Tracking
 
-Track:
+Currently, the system is logging the following backend tracking Events to the Database:
 
-- lead discovered
-- scored
-- queued
-- message sent
-- reply received
-- converted
-- opted-out
+- **WORKER_START / WORKER_SUCCESS / WORKER_ERROR / WORKER_END**: Total Script Lifecycle
+- **REDDIT_FETCH_START / SUCCESS / ERROR**: Subreddit API status & counts
+- **AI_SCORE_START / SUCCESS / ERROR**: Gemini Processing & API evaluation phases
+- **DB_FETCH_SUBREDDITS / DB_STORE_LEADS_START / SUCCESS / ERROR**: Database Interactions
+- *Upcoming Actions*: lead queued, message sent, reply received, converted, opted-out.
 
 ---
 
