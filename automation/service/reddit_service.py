@@ -2,6 +2,17 @@ import requests
 from automation.utils.logger import add_log
 
 def fetch_latest_posts(subreddit_name="startups"):
+    """
+    The function fetches the latest posts from a specified subreddit on Reddit and logs any errors that
+    occur during the process.
+    
+    :param subreddit_name: The `fetch_latest_posts` function is designed to fetch the latest posts from
+    a specified subreddit on Reddit. The default subreddit name is set to "startups", but you can
+    provide a different subreddit name as an argument when calling the function, defaults to startups
+    (optional)
+    :return: An empty list `[]` is being returned in case of an error during the fetching of posts from
+    the specified subreddit.
+    """
     add_log("REDDIT_FETCH_START", f"Fetching posts from r/{subreddit_name}", "info")
     
     try:

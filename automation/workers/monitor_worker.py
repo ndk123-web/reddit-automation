@@ -3,6 +3,7 @@ from automation.service.ai_service import score_post
 from automation.service.db_tasks import fetch_subreddits, store_lead_posts
 from automation.utils.parse_response import parse_gemini_response
 from automation.utils.logger import add_log, flush_logs
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pprint import pprint
 from dotenv import load_dotenv
 from datetime import datetime
@@ -19,7 +20,7 @@ from datetime import datetime
 load_dotenv()
 
 
-def run():
+def run_monitor_worker():
     add_log("WORKER_START", "Starting Reddit Monitor Worker", "info")
     try:
         ALLOWED_SUB_REDDITS_LIST = fetch_subreddits()
@@ -27,9 +28,23 @@ def run():
 
         print("Allowed:")
         pprint(ALLOWED_SUB_REDDITS_LIST)
-        for subreddit in ALLOWED_SUB_REDDITS_LIST:
-            subreddit_posts = fetch_latest_posts(subreddit_name=subreddit)
-            TOTAL_AGGREGATE_POSTS[subreddit] = subreddit_posts
+        
+        # Parallely Reddit APIs call karne ke liye ThreadPoolExecutor ka use
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            # Future mapping set karna (Thread assign karna)
+            future_to_sub = {
+                executor.submit(fetch_latest_posts, subreddit_name=sub): sub 
+                for sub in ALLOWED_SUB_REDDITS_LIST
+            }
+            
+            # Jaise jaise API responses aate jayenge waise waise add hote jayenge
+            for future in as_completed(future_to_sub):
+                sub = future_to_sub[future]
+                try:
+                    TOTAL_AGGREGATE_POSTS[sub] = future.result()
+                except Exception as exc:
+                    print(f"Thread failed for {sub}: {exc}")
+                    TOTAL_AGGREGATE_POSTS[sub] = []
 
         print("\n--- Calling Gemini for lead scoring ---\n")
         score_lead_posts_text = score_post(TOTAL_AGGREGATE_POSTS)
@@ -108,5 +123,3 @@ def run():
     finally:
         add_log("WORKER_END", "Monitor worker cycle finished", "info")
         flush_logs()  # DONT FORGET TO FLUSH!
-
-run()
