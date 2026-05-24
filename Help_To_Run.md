@@ -26,3 +26,9 @@ Follow these simple steps to setup and run the project locally.
 
 **To run the Backend Server:**
 `uvicorn backend.main:app --reload`
+
+### 4. Alembic
+
+i. Generate `alembic revision --autogenerate -m "add priority to lead_posts"`
+
+ii. Apply: `alembic upgrade head`
