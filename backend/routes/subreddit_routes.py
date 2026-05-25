@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from automation.config.database import SessionLocal
 from backend.schemas.subreddit_schema import SubredditCreate
-from backend.controller.subreddit_controller import fetch_subreddits, add_subreddit, remove_subreddit
+from backend.controller.subreddit_controller import fetch_subreddits, add_subreddit, remove_subreddit, deactivate_subreddit, activate_subreddit
 
 router = APIRouter()
 
@@ -33,4 +33,16 @@ def delete_subreddit_route(subreddit_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Subreddit not found")
     return {"message": "Subreddit deleted successfully"}
 
-    return add_subreddit(db, data)
+@router.put("/subreddits/{subreddit_name}/deactivate")
+def deactivate_subreddit_route(subreddit_name: str, db: Session = Depends(get_db)):
+    deactivated = deactivate_subreddit(db, subreddit_name)
+    if not deactivated:
+        raise HTTPException(status_code=404, detail="Subreddit not found or already deactivated")
+    return {"message": "Subreddit deactivated successfully"}
+
+@router.put("/subreddits/{subreddit_name}/activate")
+def activate_subreddit_route(subreddit_name: str, db: Session = Depends(get_db)):
+    activated = activate_subreddit(db, subreddit_name)
+    if not activated:
+        raise HTTPException(status_code=404, detail="Subreddit not found or already active")
+    return {"message": "Subreddit activated successfully"}

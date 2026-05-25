@@ -450,9 +450,11 @@ export default function App() {
     }
   };
 
-  const handleToggleSubreddit = async (id, currentActive) => {
+  const handleToggleSubreddit = async (id, currentActive, name) => {
     try {
-      const res = await fetch(`${API_URL}/subreddits/${id}`, {
+      console.log("Click toggle subreddit active")
+      const isActivate = (currentActive === false) ? "activate" : "deactivate";
+      const res = await fetch(`${API_URL}/subreddits/${name}/${isActivate}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ active: !currentActive })
@@ -1897,7 +1899,7 @@ export default function App() {
 
                     <div className="flex items-center gap-3.5 self-end md:self-center shrink-0">
                       <button
-                        onClick={() => handleToggleSubreddit(sub.id, sub.active)}
+                        onClick={() => handleToggleSubreddit(sub.id, sub.active, sub.name)}
                         className={`p-2 rounded-xl border transition-all ${
                           sub.active 
                             ? "bg-zinc-50 dark:bg-zinc-950/20 text-zinc-500 dark:text-zinc-400 border-glassBorder hover:text-white" 
