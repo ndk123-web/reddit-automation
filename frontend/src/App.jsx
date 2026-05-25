@@ -58,7 +58,14 @@ export default function App() {
 
   // App Core States
   const [activeTab, setActiveTab] = useState("overview");
-  const [analytics, setAnalytics] = useState(null);
+  const [analytics, setAnalytics] = useState({
+    total_leads: 0,
+    qualified_leads: 0,
+    queue_pending: 0,
+    outreach_sent: 0,
+    replied: 0,
+    conversion_rate: 0
+  });
   const [leads, setLeads] = useState([]);
   const [hoveredTrendMonth, setHoveredTrendMonth] = useState("Mar");
   const [hoveredQualMonth, setHoveredQualMonth] = useState("Mar");
@@ -71,6 +78,8 @@ export default function App() {
   const [queue, setQueue] = useState([]);
   const [sequences, setSequences] = useState([]);
   const [logs, setLogs] = useState([]);
+  const [logsPage, setLogsPage] = useState(1);
+  const [logsTotal, setLogsTotal] = useState(0);
   const [health, setHealth] = useState([]);
   const [blocked, setBlocked] = useState([]);
   const [settings, setSettings] = useState([]);
@@ -147,21 +156,33 @@ export default function App() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Load backend data if authenticated
+  // Load backend data if authenticated - Only fetch core data once or appropriately
+  // Active Tab should NOT be here to avoid 0 rerenders and unnecessary API calls!
   useEffect(() => {
     if (isAuthenticated && !isCheckingAuth) {
       fetchAnalytics();
-      fetchLeads();
       fetchSubreddits();
       fetchKeywords();
       fetchQueue();
       fetchSequences();
-      fetchLogs();
       fetchHealth();
       fetchBlocked();
       fetchSettings();
     }
-  }, [isAuthenticated, isCheckingAuth, activeTab, leadsPage, leadsFilter]);
+  }, [isAuthenticated, isCheckingAuth]);
+
+  // Dependent fetches for Leads and Logs (pagination and filters)
+  useEffect(() => {
+    if (isAuthenticated && !isCheckingAuth) {
+      fetchLeads();
+    }
+  }, [isAuthenticated, isCheckingAuth, leadsPage, leadsFilter]);
+
+  useEffect(() => {
+    if (isAuthenticated && !isCheckingAuth) {
+      fetchLogs();
+    }
+  }, [isAuthenticated, isCheckingAuth, logsPage]);
 
   // Keyboard shortcut for Search (⌘ K or Ctrl K)
   useEffect(() => {
@@ -180,8 +201,30 @@ export default function App() {
   const fetchAnalytics = async () => {
     try {
       const res = await fetch(`${API_URL}/analytics`);
-      if (res.ok) setAnalytics(await res.json());
-    } catch (e) { console.error("Error fetching analytics:", e); }
+      if (res.ok) {
+        setAnalytics(await res.json());
+      } else {
+        // Fallback to avoid empty dashboard if endpoint isn't ready
+        setAnalytics({
+          total_leads: leadsTotal || 0,
+          qualified_leads: leads.filter(l => l.status === "qualified").length || 0,
+          queue_pending: queue.length || 0,
+          outreach_sent: leads.filter(l => l.status === "outreach_sent").length || 0,
+          replied: leads.filter(l => l.status === "replied").length || 0,
+          conversion_rate: 0
+        });
+      }
+    } catch (e) { 
+      console.error("Error fetching analytics:", e); 
+      setAnalytics({
+        total_leads: leadsTotal || 0,
+        qualified_leads: leads.filter(l => l.status === "qualified").length || 0,
+        queue_pending: queue.length || 0,
+        outreach_sent: leads.filter(l => l.status === "outreach_sent").length || 0,
+        replied: leads.filter(l => l.status === "replied").length || 0,
+        conversion_rate: 0
+      });
+    }
   };
 
   const fetchLeads = async () => {
@@ -197,8 +240,22 @@ export default function App() {
       const res = await fetch(`${API_URL}/leads?${query}`);
       if (res.ok) {
         const data = await res.json();
-        setLeads(data.items);
-        setLeadsTotal(data.total);
+        const formattedLeads = data.items.map(lead => ({
+           id: lead.id,
+           reddit_post_id: lead.reddit_post_id,
+           subreddit_name: lead.subreddit_name,
+           author_username: lead.author_username,
+           title: lead.title,
+           content: lead.content,
+           post_url: lead.post_url,
+           ai_score: lead.ai_score,
+           ai_reason: lead.ai_reason,
+           status: lead.status || "discovered",
+           created_utc: lead.created_utc,
+           fetched_at: lead.fetched_at
+        }));
+        setLeads(formattedLeads);
+        setLeadsTotal(data.total || formattedLeads.length);
       }
     } catch (e) { console.error("Error fetching leads:", e); }
     finally { setLoading(false); }
@@ -215,7 +272,7 @@ export default function App() {
       console.error(e); 
     } finally {
       // Small timeout to prevent flicker if it loads too fast
-      setTimeout(() => setActionLoading(prev => prev === "fetch_subreddits" ? null : prev), 300);
+      setTimeout(() => setActionLoading(prev => prev === "fe  tch_subreddits" ? null : prev), 300);
     }
   };
 
@@ -242,8 +299,19 @@ export default function App() {
 
   const fetchLogs = async () => {
     try {
-      const res = await fetch(`${API_URL}/audit`);
-      if (res.ok) setLogs(await res.json());
+      const res = await fetch(`${API_URL}/audit?page=${logsPage}&limit=20`);
+      if (res.ok) {
+         const data = await res.json();
+         const formattedLogs = data.items.map(log => ({
+            id: log.id,
+            action: log.event_type || log.action, // Fallback mapping
+            details: log.message || log.details,
+            status: log.status,
+            timestamp: log.created_at || log.timestamp
+         }));
+         setLogs(formattedLogs);
+         setLogsTotal(data.total);
+      }
     } catch (e) { console.error(e); }
   };
 
@@ -1184,7 +1252,7 @@ export default function App() {
                 <div className="bg-white dark:bg-darkCard border border-zinc-200 dark:border-zinc-800/80 rounded-2xl p-5 flex justify-between items-start">
                   <div className="space-y-1">
                     <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-widest">Total Leads</p>
-                    <h3 className="text-3xl font-black text-zinc-900 dark:text-white mt-1">2,847</h3>
+                    <h3 className="text-3xl font-black text-zinc-900 dark:text-white mt-1">{analytics.total_leads || 0}</h3>
                     <div className="flex items-center gap-1 text-[10px] font-bold text-accentGreen mt-2">
                       <span>↗ +12.5%</span>
                       <span className="text-zinc-500 font-semibold">vs last week</span>
@@ -1201,7 +1269,7 @@ export default function App() {
                 <div className="bg-white dark:bg-darkCard border border-zinc-200 dark:border-zinc-800/80 rounded-2xl p-5 flex justify-between items-start">
                   <div className="space-y-1">
                     <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-widest">AI Qualified</p>
-                    <h3 className="text-3xl font-black text-zinc-900 dark:text-white mt-1">1,234</h3>
+                    <h3 className="text-3xl font-black text-zinc-900 dark:text-white mt-1">{analytics.qualified_leads || 0}</h3>
                     <div className="flex items-center gap-1 text-[10px] font-bold text-accentGreen mt-2">
                       <span>↗ +8.2%</span>
                       <span className="text-zinc-500 font-semibold">vs last week</span>
@@ -1216,7 +1284,7 @@ export default function App() {
                 <div className="bg-white dark:bg-darkCard border border-zinc-200 dark:border-zinc-800/80 rounded-2xl p-5 flex justify-between items-start">
                   <div className="space-y-1">
                     <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-widest">Outreach Sent</p>
-                    <h3 className="text-3xl font-black text-zinc-900 dark:text-white mt-1">892</h3>
+                    <h3 className="text-3xl font-black text-zinc-900 dark:text-white mt-1">{analytics.outreach_sent || 0}</h3>
                     <div className="flex items-center gap-1 text-[10px] font-bold text-accentGreen mt-2">
                       <span>↗ +15.3%</span>
                       <span className="text-zinc-500 font-semibold">vs last week</span>
@@ -1231,7 +1299,7 @@ export default function App() {
                 <div className="bg-white dark:bg-darkCard border border-zinc-200 dark:border-zinc-800/80 rounded-2xl p-5 flex justify-between items-start">
                   <div className="space-y-1">
                     <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-widest">Conversion Rate</p>
-                    <h3 className="text-3xl font-black text-zinc-900 dark:text-white mt-1">23.4%</h3>
+                    <h3 className="text-3xl font-black text-zinc-900 dark:text-white mt-1">{analytics.conversion_rate !== undefined ? `${analytics.conversion_rate}%` : '0%'}</h3>
                     <div className="flex items-center gap-1 text-[10px] font-bold text-accentRed mt-2">
                       <span>↘ -2.1%</span>
                       <span className="text-zinc-500 font-semibold">vs last week</span>
@@ -1547,12 +1615,12 @@ export default function App() {
               {/* Horizontal grid of Stage Counts exactly matching counters in screenshot */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 shrink-0">
                 {[
-                  { label: "Discovered", value: leads.filter(l => l.status === "discovered").length || 2 },
-                  { label: "Qualified", value: leads.filter(l => l.status === "qualified").length || 1 },
-                  { label: "Queued", value: leads.filter(l => l.status === "queued").length || 1 },
-                  { label: "Outreach Sent", value: leads.filter(l => l.status === "outreach_sent").length || 1 },
-                  { label: "Replied", value: leads.filter(l => l.status === "replied").length || 1 },
-                  { label: "Converted", value: leads.filter(l => l.status === "converted").length || 0 }
+                  { label: "Discovered", value: leads.filter(l => l.status === "discovered").length },
+                  { label: "Qualified", value: leads.filter(l => l.status === "qualified").length },
+                  { label: "Queued", value: leads.filter(l => l.status === "queued").length },
+                  { label: "Outreach Sent", value: leads.filter(l => l.status === "outreach_sent").length },
+                  { label: "Replied", value: leads.filter(l => l.status === "replied").length },
+                  { label: "Converted", value: leads.filter(l => l.status === "converted").length }
                 ].map((stage, idx) => (
                   <div key={idx} className="bg-white dark:bg-darkCard border border-zinc-200 dark:border-zinc-800/60 p-3.5 rounded-xl space-y-1 shadow-sm">
                     <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest">{stage.label}</span>
@@ -1564,27 +1632,16 @@ export default function App() {
               {/* 6 Column Kanban Pipeline Board exactly matching screenshot colors & elements */}
               <div className="flex-1 overflow-x-auto flex gap-6 pb-4 custom-scrollbar">
                 {[
-                  { id: "discovered", label: "Discovered", color: "bg-purple-500", badge: "bg-purple-500/10 text-purple-400 border border-purple-500/20", mock: [
-                    { id: 101, author_username: "startup_founder_23", subreddit_name: "r/SaaS", title: "Looking for tools to automate our Reddit outreach. We're a B2B Sa...", ai_score: 94, created_at: "2 hours ago" },
-                    { id: 102, author_username: "tech_entrepreneur", subreddit_name: "r/startups", title: "Anyone here using AI for lead generation? Would love to hear...", ai_score: 88, created_at: "4 hours ago" }
-                  ]},
-                  { id: "qualified", label: "Qualified", color: "bg-indigo-500", badge: "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20", mock: [
-                    { id: 103, author_username: "marketing_pro", subreddit_name: "r/marketing", title: "Need recommendations for Reddit marketing automation tools...", ai_score: 92, created_at: "6 hours ago" }
-                  ]},
-                  { id: "queued", label: "Queued", color: "bg-blue-500", badge: "bg-blue-500/10 text-blue-400 border border-blue-500/20", mock: [
-                    { id: 104, author_username: "growth_hacker_99", subreddit_name: "r/entrepreneur", title: "What's the best way to find potential customers on Reddit?", ai_score: 85, created_at: "8 hours ago" }
-                  ]},
-                  { id: "outreach_sent", label: "Outreach Sent", color: "bg-cyan-500", badge: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20", mock: [
-                    { id: 105, author_username: "saas_builder", subreddit_name: "r/SaaS", title: "Building a new customer engagement platform, looking f...", ai_score: 91, created_at: "1 day ago" }
-                  ]},
-                  { id: "replied", label: "Replied", color: "bg-green-500", badge: "bg-green-500/10 text-green-400 border border-green-500/20", mock: [
-                    { id: 106, author_username: "digital_marketer", subreddit_name: "r/marketing", title: "Struggling with lead generation for our agency. Any tips?", ai_score: 87, created_at: "2 days ago" }
-                  ]},
-                  { id: "converted", label: "Converted", color: "bg-emerald-500", badge: "bg-zinc-800 text-zinc-500 border border-zinc-700/60", mock: [] }
+                  { id: "discovered", label: "Discovered", color: "bg-purple-500", badge: "bg-purple-500/10 text-purple-400 border border-purple-500/20" },
+                  { id: "qualified", label: "Qualified", color: "bg-indigo-500", badge: "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20" },
+                  { id: "queued", label: "Queued", color: "bg-blue-500", badge: "bg-blue-500/10 text-blue-400 border border-blue-500/20" },
+                  { id: "outreach_sent", label: "Outreach Sent", color: "bg-cyan-500", badge: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20" },
+                  { id: "replied", label: "Replied", color: "bg-green-500", badge: "bg-green-500/10 text-green-400 border border-green-500/20" },
+                  { id: "converted", label: "Converted", color: "bg-emerald-500", badge: "bg-zinc-800 text-zinc-500 border border-zinc-700/60" }
                 ].map((column) => {
                   const dbLeads = filteredLeadsList.filter(l => l.status === column.id);
-                  // Merge dynamic database data with exact high fidelity mock cards for complete screenshot match
-                  const colLeads = dbLeads.length > 0 ? dbLeads : column.mock;
+                  // Use real database data only. If there are no leads it will be an empty array
+                  const colLeads = dbLeads;
                   
                   return (
                     <div 
@@ -2541,26 +2598,52 @@ export default function App() {
                 <p className="text-sm font-semibold text-zinc-500 dark:text-zinc-400 mt-1.5">Complete activity history and system events</p>
               </div>
 
-              <div className="bg-white dark:bg-darkCard border border-zinc-200 dark:border-zinc-800/80 p-6 rounded-2xl shadow-premium">
+              <div className="bg-white dark:bg-darkCard border border-zinc-200 dark:border-zinc-800/80 p-6 rounded-2xl shadow-premium space-y-4">
                 <div className="space-y-3">
-                  {[
-                    { action: "Lead discovered", detail: "u/startup_founder_23", time: "2 min ago" },
-                    { action: "Message sent", detail: "u/tech_entrepreneur", time: "5 min ago" },
-                    { action: "Subreddit added", detail: "r/SaaS", time: "10 min ago" },
-                    { action: "AI qualification complete", detail: "u/marketing_pro", time: "15 min ago" }
-                  ].map((row, idx) => (
-                    <div key={idx} className="bg-zinc-50 dark:bg-[#18182c]/30 border border-zinc-200 dark:border-zinc-800/50 rounded-xl p-4.5 flex items-center justify-between text-xs select-none">
-                      <div className="flex items-center gap-3">
-                        <Shield className="w-4 h-4 text-zinc-500 shrink-0" />
-                        <span className="text-zinc-700 dark:text-zinc-300 font-semibold">{row.action}</span>
-                        <span className="bg-zinc-100 dark:bg-[#22223b]/50 px-2.5 py-0.5 rounded text-[10px] text-zinc-500 dark:text-zinc-400 font-semibold font-mono">
-                          {row.detail}
-                        </span>
+                  {logs.length > 0 ? (
+                    logs.map((row, idx) => (
+                      <div key={idx} className="bg-zinc-50 dark:bg-[#18182c]/30 border border-zinc-200 dark:border-zinc-800/50 rounded-xl p-4.5 flex items-center justify-between text-xs select-none">
+                        <div className="flex items-center gap-3">
+                          <Shield className="w-4 h-4 text-zinc-500 shrink-0" />
+                          <span className="text-zinc-700 dark:text-zinc-300 font-semibold">{row.action}</span>
+                          <span className="bg-zinc-100 dark:bg-[#22223b]/50 px-2.5 py-0.5 rounded text-[10px] text-zinc-500 dark:text-zinc-400 font-semibold font-mono">
+                            {row.details}
+                          </span>
+                        </div>
+                        <span className="text-zinc-500 text-[11px] font-semibold shrink-0">{row.timestamp ? new Date(row.timestamp).toLocaleString() : ""}</span>
                       </div>
-                      <span className="text-zinc-500 text-[11px] font-semibold shrink-0">{row.time}</span>
+                    ))
+                  ) : (
+                    <div className="border border-dashed border-glassBorder rounded-xl p-6 text-center text-zinc-500 text-sm">
+                       No audit logs recorded yet. Events will appear here.
                     </div>
-                  ))}
+                  )}
                 </div>
+
+                {/* Pagination Controls */}
+                {logsTotal > 20 && (
+                  <div className="flex items-center justify-between border-t border-zinc-200 dark:border-zinc-800/80 pt-4 px-2">
+                    <span className="text-xs text-zinc-500 font-semibold">
+                      Showing {(logsPage - 1) * 20 + 1} to {Math.min(logsPage * 20, logsTotal)} of {logsTotal}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        disabled={logsPage === 1}
+                        onClick={() => setLogsPage(p => Math.max(1, p - 1))}
+                        className="px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-600 dark:text-zinc-400 text-xs font-bold hover:bg-zinc-50 dark:hover:bg-zinc-900 disabled:opacity-50 transition-colors"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        disabled={logsPage * 20 >= logsTotal}
+                        onClick={() => setLogsPage(p => p + 1)}
+                        className="px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-600 dark:text-zinc-400 text-xs font-bold hover:bg-zinc-50 dark:hover:bg-zinc-900 disabled:opacity-50 transition-colors"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
