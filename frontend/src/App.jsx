@@ -184,6 +184,17 @@ export default function App() {
     }
   }, [isAuthenticated, isCheckingAuth, logsPage]);
 
+  // Auto-refresh Analytics every 30 seconds (Dashboard always stays updated)
+  useEffect(() => {
+    if (isAuthenticated && !isCheckingAuth) {
+      const interval = setInterval(() => {
+        console.log("Fetching Analytics 30 per second...")
+        fetchAnalytics();
+      }, 30000); // 30 seconds
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated]);
+
   // Keyboard shortcut for Search (⌘ K or Ctrl K)
   useEffect(() => {
     const handleKeyDown = (e) => {
