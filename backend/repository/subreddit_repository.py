@@ -23,3 +23,19 @@ def delete_subreddit(db, subreddit_id):
         db.delete(subreddit)
         db.commit()
     return subreddit
+
+def deactive_subreddit(db, subreddit_name):
+    subreddit = db.query(Subreddit).filter(Subreddit.name == subreddit_name).first()
+    if subreddit and subreddit.active:
+        subreddit.active = False
+        db.commit()
+        return True
+    return False
+    
+def active_subreddit(db, subreddit_name):
+    subreddit = db.query(Subreddit).filter(Subreddit.name == subreddit_name).first()
+    if subreddit and not subreddit.active:
+        subreddit.active = True
+        db.commit()
+        return True
+    return False
