@@ -64,58 +64,67 @@ def run_monitor_worker():
             for post in posts:
                 raw_posts_map[post["reddit_post_id"]] = post
 
-        # Combine AI scored data with raw Reddit data
-        final_leads = []
-        
-        # The AI response is expected to be grouped by subreddit
+        # Flatten AI scored posts by reddit_post_id for quick lookup
+        scored_posts_map = {}
         if isinstance(scored_posts_dict, dict):
             for subreddit, scored_posts in scored_posts_dict.items():
                 for scored_post in scored_posts:
                     post_id = scored_post.get("reddit_post_id")
-                    if post_id in raw_posts_map:
-                        raw_post = raw_posts_map[post_id]
-                        
-                        # Merge data
-                        ai_score = scored_post.get("ai_score")
-                        
-                        # Filter: Only store if ai_score > 7
-                        try:
-                            score_val = int(ai_score) if ai_score is not None else 0
-                        except ValueError:
-                            score_val = 0
-                            
-                        if score_val > 7:
-                            # Convert float timestamp to datetime
-                            created_utc_ts = raw_post.get("created_utc")
-                            if isinstance(created_utc_ts, (int, float)):
-                                created_utc_dt = datetime.utcfromtimestamp(created_utc_ts)
-                            else:
-                                created_utc_dt = datetime.utcnow() # fallback
+                    if post_id:
+                        scored_posts_map[post_id] = scored_post
 
-                            combined = {
-                                "reddit_post_id": post_id,
-                                "subreddit_name": raw_post.get("subreddit_name"),
-                                "author_username": raw_post.get("author_username"),
-                                "title": raw_post.get("title"),
-                                "content": raw_post.get("content"),
-                                "post_url": raw_post.get("post_url"),
-                                "ai_score": score_val,
-                                "ai_reason": scored_post.get("ai_reason"),
-                                "status": scored_post.get("status"),
-                                "created_utc": created_utc_dt,
-                            }
-                            final_leads.append(combined)
+        # Combine AI scored data with raw Reddit data
+        final_leads = []
+
+        for post_id, raw_post in raw_posts_map.items():
+            scored_post = scored_posts_map.get(post_id, {})
+
+            # Merge data
+            ai_score = scored_post.get("ai_score")
+            try:
+                score_val = int(ai_score) if ai_score is not None else 0
+            except ValueError:
+                score_val = 0
+
+            lead_status = "qualified" if score_val > 7 else "discovered"
+
+            # Convert float timestamp to datetime
+            created_utc_ts = raw_post.get("created_utc")
+            if isinstance(created_utc_ts, (int, float)):
+                created_utc_dt = datetime.utcfromtimestamp(created_utc_ts)
+            else:
+                created_utc_dt = datetime.utcnow() # fallback
+
+            combined = {
+                "reddit_post_id": post_id,
+                "subreddit_name": raw_post.get("subreddit_name"),
+                "author_username": raw_post.get("author_username"),
+                "title": raw_post.get("title"),
+                "content": raw_post.get("content"),
+                "post_url": raw_post.get("post_url"),
+                "ai_score": score_val,
+                "ai_reason": scored_post.get("ai_reason"),
+                "status": lead_status,
+                "created_utc": created_utc_dt,
+            }
+            final_leads.append(combined)
 
         print("\n--- Combining data and saving to Database ---\n")
         pprint(final_leads)
+        discovered_count = len([lead for lead in final_leads if lead["status"] == "discovered"])
+        qualified_count = len([lead for lead in final_leads if lead["status"] == "qualified"])
         
         if final_leads:
             store_lead_posts(final_leads)
-            print(f"Successfully stored {len(final_leads)} hot leads.")
-            add_log("WORKER_SUCCESS", f"Successfully processed and stored {len(final_leads)} hot leads", "success")
+            print(f"Successfully stored {len(final_leads)} leads: {qualified_count} qualified, {discovered_count} discovered.")
+            add_log(
+                "WORKER_SUCCESS",
+                f"Processed {len(final_leads)} raw posts, stored {qualified_count} qualified and {discovered_count} discovered leads.",
+                "success",
+            )
         else:
-            print("No leads passed the threshold (score > 7).")
-            add_log("WORKER_SUCCESS", "No hot leads passed the threshold > 7", "info")
+            print("No raw posts were fetched.")
+            add_log("WORKER_SUCCESS", "No raw posts were fetched from active subreddits.", "info")
 
     except Exception as e:
         print(f"Worker crashed: {e}")
