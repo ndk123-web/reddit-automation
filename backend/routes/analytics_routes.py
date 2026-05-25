@@ -15,6 +15,7 @@ def get_db():
 @router.get("/analytics")
 def get_analytics(db: Session = Depends(get_db)):
     total_leads = db.query(LeadPost).count()
+    discovered_leads = db.query(LeadPost).filter(LeadPost.status == "discovered").count()
     qualified_leads = db.query(LeadPost).filter(LeadPost.status == "qualified").count()
     outreach_sent = db.query(LeadPost).filter(LeadPost.status == "outreach_sent").count()
     replied = db.query(LeadPost).filter(LeadPost.status == "replied").count()
@@ -23,6 +24,7 @@ def get_analytics(db: Session = Depends(get_db)):
     
     return {
         "total_leads": total_leads,
+        "discovered_leads": discovered_leads,
         "qualified_leads": qualified_leads,
         "outreach_sent": outreach_sent,
         "replied": replied,

@@ -1274,11 +1274,11 @@ export default function App() {
               {/* Stat Cards - Grid of 4 exactly matching screenshot colors, layout, and values */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 
-                {/* 1. Total Leads Card */}
+                {/* 1. Discovered / Rejected Card */}
                 <div className="bg-white dark:bg-darkCard border border-zinc-200 dark:border-zinc-800/80 rounded-2xl p-5 flex justify-between items-start">
                   <div className="space-y-1">
-                    <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-widest">Total Leads</p>
-                    <h3 className="text-3xl font-black text-zinc-900 dark:text-white mt-1">{analytics.total_leads || 0}</h3>
+                    <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-widest">Discovered / Rejected</p>
+                    <h3 className="text-3xl font-black text-zinc-900 dark:text-white mt-1">{analytics.discovered_leads || 0}</h3>
                     <div className="flex items-center gap-1 text-[10px] font-bold text-accentGreen mt-2">
                       <span>↗ +12.5%</span>
                       <span className="text-zinc-500 font-semibold">vs last week</span>
@@ -1291,10 +1291,10 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 2. AI Qualified Card */}
+                {/* 2. Qualified Leads Card */}
                 <div className="bg-white dark:bg-darkCard border border-zinc-200 dark:border-zinc-800/80 rounded-2xl p-5 flex justify-between items-start">
                   <div className="space-y-1">
-                    <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-widest">AI Qualified</p>
+                    <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-widest">Qualified Leads</p>
                     <h3 className="text-3xl font-black text-zinc-900 dark:text-white mt-1">{analytics.qualified_leads || 0}</h3>
                     <div className="flex items-center gap-1 text-[10px] font-bold text-accentGreen mt-2">
                       <span>↗ +8.2%</span>
@@ -1657,7 +1657,7 @@ export default function App() {
               {/* Horizontal grid of Stage Counts exactly matching counters in screenshot */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 shrink-0">
                 {[
-                  { label: "Discovered", value: leads.filter(l => l.status === "discovered").length },
+                  { label: "Raw Discovered", value: leads.filter(l => l.status === "discovered").length },
                   { label: "Qualified", value: leads.filter(l => l.status === "qualified").length },
                   { label: "Queued", value: leads.filter(l => l.status === "queued").length },
                   { label: "Outreach Sent", value: leads.filter(l => l.status === "outreach_sent").length },
@@ -1674,7 +1674,7 @@ export default function App() {
               {/* 6 Column Kanban Pipeline Board exactly matching screenshot colors & elements */}
               <div className="flex-1 overflow-x-auto flex gap-6 pb-4 custom-scrollbar">
                 {[
-                  { id: "discovered", label: "Discovered", color: "bg-purple-500", badge: "bg-purple-500/10 text-purple-400 border border-purple-500/20" },
+                  { id: "discovered", label: "Raw Discovered", color: "bg-purple-500", badge: "bg-purple-500/10 text-purple-400 border border-purple-500/20" },
                   { id: "qualified", label: "Qualified", color: "bg-indigo-500", badge: "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20" },
                   { id: "queued", label: "Queued", color: "bg-blue-500", badge: "bg-blue-500/10 text-blue-400 border border-blue-500/20" },
                   { id: "outreach_sent", label: "Outreach Sent", color: "bg-cyan-500", badge: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20" },
