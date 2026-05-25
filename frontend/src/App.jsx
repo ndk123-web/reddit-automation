@@ -85,7 +85,7 @@ export default function App() {
   const [settings, setSettings] = useState([]);
 
   // Live settings states (upgraded Settings panel)
-  const [settingsMinScore, setSettingsMinScore] = useState(75);
+  const [settingsMinScore, setSettingsMinScore] = useState(7);
   const [settingsModel, setSettingsModel] = useState("Gemini 1.5 Pro (Recommended)");
   const [settingsAutoQualify, setSettingsAutoQualify] = useState(true);
   const [settingsMaxMessages, setSettingsMaxMessages] = useState(50);
@@ -183,6 +183,17 @@ export default function App() {
       fetchLogs();
     }
   }, [isAuthenticated, isCheckingAuth, logsPage]);
+
+  // Auto-refresh Analytics every 30 seconds (Dashboard always stays updated)
+  useEffect(() => {
+    if (isAuthenticated && !isCheckingAuth) {
+      const interval = setInterval(() => {
+        console.log("Fetching Analytics 30 per second...")
+        fetchAnalytics();
+      }, 30000); // 30 seconds
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated]);
 
   // Keyboard shortcut for Search (⌘ K or Ctrl K)
   useEffect(() => {
@@ -545,7 +556,7 @@ export default function App() {
   };
 
   const handleResetSettingsDefaults = () => {
-    setSettingsMinScore(75);
+    setSettingsMinScore(7);
     setSettingsModel("Gemini 1.5 Pro (Recommended)");
     setSettingsAutoQualify(true);
     setSettingsMaxMessages(50);
@@ -721,6 +732,19 @@ export default function App() {
       handleUpdateLeadStatus(leadId, targetStatus);
       setNotice({ type: "success", text: `Lead status updated to ${targetStatus} via pipeline drag-drop.` });
     }
+  };
+
+  // Helper for Relative Time
+  const getRelativeTime = (timestamp) => {
+    if (!timestamp) return "Recent";
+    const date = typeof timestamp === "number" ? new Date(timestamp * 1000) : new Date(timestamp);
+    const diff = Math.floor((new Date() - date) / 1000); // difference in seconds
+
+    if (diff < 60) return `${diff} seconds ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)} mins ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)} hrs ago`;
+    if (diff < 2592000) return `${Math.floor(diff / 86400)} days ago`;
+    return date.toLocaleDateString();
   };
 
   // Mapped list of subreddits with metrics fallbacks
@@ -1478,36 +1502,52 @@ export default function App() {
                 
                 {/* Recent Leads Left Side (2/3 width) - Exactly matching values in Image 2 */}
                 <div className="bg-white dark:bg-darkCard border border-zinc-200 dark:border-zinc-800/80 rounded-2xl p-6 lg:col-span-2 space-y-4">
-                  <div>
-                    <h4 className="font-extrabold text-sm text-zinc-800 dark:text-zinc-100">Recent Leads</h4>
-                    <p className="text-[10px] text-zinc-500 font-semibold mt-0.5">Latest high-score leads discovered by AI</p>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h4 className="font-extrabold text-sm text-zinc-800 dark:text-zinc-100">Recent Leads</h4>
+                      <p className="text-[10px] text-zinc-500 font-semibold mt-0.5">Latest high-score leads discovered by AI</p>
+                    </div>
+                    <button onClick={() => setActiveTab("pipeline")} className="text-xs text-[#6366f1] font-bold hover:underline transition-all">
+                      View All
+                    </button>
                   </div>
                   
                   <div className="space-y-3.5">
-                    {[
-                      { user: "startup_founder_23", sub: "r/SaaS", tag: "qualified", tagBg: "bg-purple-500/10 text-purple-400 border-purple-500/20", desc: "Looking for tools to automate our Reddit outreach...", score: "94/100", time: "2 hours ago" },
-                      { user: "tech_entrepreneur", sub: "r/startups", tag: "queued", tagBg: "bg-blue-500/10 text-blue-400 border-blue-500/20", desc: "Anyone here using AI for lead generation?", score: "88/100", time: "4 hours ago" },
-                      { user: "marketing_pro", sub: "r/marketing", tag: "sent", tagBg: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20", desc: "Need recommendations for Reddit marketing automation...", score: "92/100", time: "6 hours ago" },
-                      { user: "growth_hacker_99", sub: "r/entrepreneur", tag: "replied", tagBg: "bg-green-500/10 text-green-400 border-green-500/20", desc: "What's the best way to find potential customers on Reddit?", score: "85/100", time: "8 hours ago" }
-                    ].map((lead, idx) => (
+                    {leads.slice(0, 4).map((lead, idx) => {
+                      const tagColorMap = {
+                        discovered: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+                        qualified: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
+                        queued: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+                        outreach_sent: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
+                        replied: "bg-green-500/10 text-green-400 border-green-500/20",
+                        converted: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                      };
+                      const tagBg = tagColorMap[lead.status] || "bg-zinc-500/10 text-zinc-400 border-zinc-500/20";
+                      
+                      return (
                       <div 
                         key={idx} 
                         className="p-4.5 rounded-xl bg-zinc-50 dark:bg-[#18182c]/40 border border-zinc-200 dark:border-zinc-800/80 hover:border-[#3b82f6]/40 hover:shadow-[0_0_20px_rgba(59,130,246,0.12)] transition-all flex flex-col justify-between"
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-zinc-800 dark:text-zinc-300">u/{lead.user}</span>
-                            <span className="text-[9px] bg-zinc-100 dark:bg-zinc-800/80 text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700/60 px-2 py-0.5 rounded font-bold">{lead.sub}</span>
-                            <span className={`text-[9px] border px-2 py-0.5 rounded font-extrabold uppercase tracking-wider ${lead.tagBg}`}>{lead.tag}</span>
+                            <span className="text-xs font-bold text-zinc-800 dark:text-zinc-300">u/{lead.author_username}</span>
+                            <span className="text-[9px] bg-zinc-100 dark:bg-zinc-800/80 text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700/60 px-2 py-0.5 rounded font-bold">{lead.subreddit_name}</span>
+                            <span className={`text-[9px] border px-2 py-0.5 rounded font-extrabold uppercase tracking-wider ${tagBg}`}>{lead.status}</span>
                           </div>
                         </div>
-                        <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-2.5 font-semibold">"{lead.desc}"</p>
+                        <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-2.5 font-semibold">"{lead.title}"</p>
                         <div className="flex items-center gap-4 mt-3 text-[10px] text-zinc-500 font-bold">
-                          <span className="flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5 text-accentGold" /> AI Score: {lead.score}</span>
-                          <span>{lead.time}</span>
+                          <span className="flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5 text-accentGold" /> AI Score: {lead.ai_score}/10</span>
+                          <span>{getRelativeTime(lead.created_utc)}</span>
                         </div>
                       </div>
-                    ))}
+                    )})}
+                    {leads.length === 0 && (
+                      <div className="py-8 text-center text-zinc-500 text-xs italic">
+                        No recent leads found.
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1700,7 +1740,7 @@ export default function App() {
                             <div className="flex items-center justify-between mt-4 pt-2 border-t border-zinc-200 dark:border-zinc-900/60 text-[10px] text-zinc-500 font-bold">
                               <span className="flex items-center gap-1">
                                 <Clock className="w-3 h-3 text-zinc-600" />
-                                {typeof lead.created_at === 'string' ? lead.created_at : new Date(lead.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                                {getRelativeTime(lead.created_utc)}
                               </span>
                               <span className="text-accentBlue hover:underline flex items-center gap-0.5 cursor-pointer">
                                 View Post
@@ -2750,14 +2790,16 @@ export default function App() {
                 </div>
                 <div className="space-y-4">
                   <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-zinc-700 dark:text-zinc-400">Minimum AI Score Threshold</label>
+                    <label className="text-[11px] font-bold text-zinc-700 dark:text-zinc-400">Minimum AI Score (0-10)</label>
                     <input
                       type="number"
+                      min="0"
+                      max="10"
                       value={settingsMinScore}
                       onChange={(e) => setSettingsMinScore(parseInt(e.target.value, 10))}
                       className="w-full bg-zinc-100/60 dark:bg-zinc-950/40 border border-glassBorder rounded-xl p-3 text-xs text-zinc-800 dark:text-zinc-400 focus:outline-none"
                     />
-                    <p className="text-[10px] text-zinc-500 font-semibold">Only qualify leads with AI scores above this value</p>
+                    <p className="text-[10px] text-zinc-500 font-semibold">Only qualify leads with AI score &gt; this value</p>
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-bold text-zinc-700 dark:text-zinc-400 font-semibold">AI Model</label>
