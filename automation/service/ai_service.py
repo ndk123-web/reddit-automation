@@ -36,7 +36,7 @@ Posts Are: \n
 
 
 def score_post(data):
-    posts_json = json.dumps(data, indent=2)
+    posts_json = json.dumps(data, indent=2, default=str)
     prompt = SYSTEM_PROMPT + posts_json
 
     add_log("AI_SCORE_START", "Sending batch to Gemini for scoring", "info")
