@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from automation.config.database import SessionLocal
-from automation.models.lead_posts import LeadPost
+from backend.controller.analytics_controller import fetch_conversion_funnel, fetch_top_subreddits
 
 router = APIRouter()
+
 
 def get_db():
     db = SessionLocal()
@@ -11,22 +12,21 @@ def get_db():
         yield db
     finally:
         db.close()
-        
+
+
+@router.get("/analytics/overview")
+def analytics_overview(db: Session = Depends(get_db)):
+    """Return conversion funnel counts for dashboard overview."""
+    return fetch_conversion_funnel(db)
+
+
+@router.get("/analytics/subreddits")
+def analytics_subreddits(limit: int = Query(5, ge=1, le=20), db: Session = Depends(get_db)):
+    """Return top performing subreddits by lead count."""
+    return {"top_subreddits": fetch_top_subreddits(db, limit)}
+
+
 @router.get("/analytics")
-def get_analytics(db: Session = Depends(get_db)):
-    total_leads = db.query(LeadPost).count()
-    discovered_leads = db.query(LeadPost).filter(LeadPost.status == "discovered").count()
-    qualified_leads = db.query(LeadPost).filter(LeadPost.status == "qualified").count()
-    outreach_sent = db.query(LeadPost).filter(LeadPost.status == "outreach_sent").count()
-    replied = db.query(LeadPost).filter(LeadPost.status == "replied").count()
-    
-    conversion_rate = round((replied / outreach_sent * 100), 1) if outreach_sent > 0 else 0
-    
-    return {
-        "total_leads": total_leads,
-        "discovered_leads": discovered_leads,
-        "qualified_leads": qualified_leads,
-        "outreach_sent": outreach_sent,
-        "replied": replied,
-        "conversion_rate": conversion_rate
-    }
+def analytics_root(db: Session = Depends(get_db)):
+    """Deprecated root analytics endpoint kept for backward compatibility."""
+    return analytics_overview(db)
