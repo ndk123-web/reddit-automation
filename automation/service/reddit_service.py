@@ -2,6 +2,7 @@ import os
 import requests
 import praw
 from datetime import datetime
+from automation.utils.logger import add_log
 
 
 def get_praw_client():
@@ -34,6 +35,7 @@ def fetch_latest_posts(subreddit_name="startups", limit=5):
 
     if reddit:
         try:
+            add_log("REDDIT_FETCH_START", f"Fetching r/{subreddit_name} using PRAW", "info")
             print(f"[Reddit Monitor] Fetching r/{subreddit_name} via PRAW")
             subreddit = reddit.subreddit(subreddit_name)
             for post in subreddit.new(limit=limit):
@@ -48,10 +50,12 @@ def fetch_latest_posts(subreddit_name="startups", limit=5):
                 })
             return cleaned_posts
         except Exception as e:
+            add_log("REDDIT_FETCH_ERROR", f"PRAW fetch failed for r/{subreddit_name}: {str(e)}. Falling back to JSON scraping.", "error")
             print(f"[Reddit Monitor] PRAW fetch failed for r/{subreddit_name}: {e}. Falling back to JSON...")
 
     # Fallback to public JSON endpoint (no auth needed, highly reliable for general reads)
     try:
+        add_log("REDDIT_FETCH_START", f"Fetching r/{subreddit_name} via JSON scraping", "info")
         print(f"[Reddit Monitor] Fetching r/{subreddit_name} via JSON scraping")
         url = f"https://www.reddit.com/r/{subreddit_name}/new.json?limit={limit}"
         headers = {"User-Agent": os.getenv("REDDIT_USER_AGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")}
@@ -78,6 +82,7 @@ def fetch_latest_posts(subreddit_name="startups", limit=5):
             })
         return cleaned_posts
     except Exception as e:
+        add_log("REDDIT_FETCH_ERROR", f"JSON fetch failed for r/{subreddit_name}: {str(e)}", "error")
         print(f"[Reddit Monitor] JSON fetch failed for r/{subreddit_name}: {e}")
         return []
 
@@ -92,11 +97,15 @@ def check_shadowban(username):
     try:
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 404:
+            add_log("REDDIT_SHADOWBAN_CHECK", f"User u/{username} not found (404) - likely shadowbanned or deleted", "warning")
             return True  # 404 User Not Found usually indicates a shadowban or deletion
         if response.status_code == 200:
             data = response.json()
             if "error" in data or data.get("data", {}).get("is_suspended"):
+                add_log("REDDIT_SHADOWBAN_CHECK", f"User u/{username} is suspended or has an error in about.json - likely shadowbanned", "warning")
                 return True
+            
+            add_log("REDDIT_SHADOWBAN_CHECK", f"User u/{username} is active and not shadowbanned", "success")
             return False
         return False
     except Exception as e:
@@ -110,13 +119,16 @@ def send_reddit_dm(recipient, subject, body):
     """
     reddit = get_praw_client()
     if not reddit:
+        add_log("REDDIT_DM_ERROR", "Reddit PRAW API credentials not configured, cannot send DM", "error")
         raise ValueError("Reddit PRAW API credentials must be configured to send DMs.")
     
     try:
         reddit.redditor(recipient).message(subject=subject, message=body)
         print(f"[Reddit Outreach] Successfully sent DM to u/{recipient}")
+        add_log("REDDIT_DM_SUCCESS", f"Sent DM to u/{recipient} with subject '{subject}'", "success")
         return True
     except Exception as e:
+        add_log("REDDIT_DM_ERROR", f"Failed to send DM to u/{recipient}: {str(e)}", "error")
         print(f"[Reddit Outreach] Failed to send DM to u/{recipient}: {e}")
         raise e
 
@@ -127,13 +139,16 @@ def send_reddit_comment(reddit_post_id, body):
     """
     reddit = get_praw_client()
     if not reddit:
+        add_log("REDDIT_COMMENT_ERROR", "Reddit PRAW API credentials not configured, cannot send comment", "error")
         raise ValueError("Reddit PRAW API credentials must be configured to send comments.")
         
     try:
         submission = reddit.submission(id=reddit_post_id)
         reply = submission.reply(body)
         print(f"[Reddit Outreach] Successfully posted public comment reply to post {reddit_post_id}")
+        add_log("REDDIT_COMMENT_SUCCESS", f"Posted comment reply to post {reddit_post_id}", "success")
         return reply.id
     except Exception as e:
+        add_log("REDDIT_COMMENT_ERROR", f"Failed to post comment to post {reddit_post_id}: {str(e)}", "error")
         print(f"[Reddit Outreach] Failed to post comment to post {reddit_post_id}: {e}")
         raise e
