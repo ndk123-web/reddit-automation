@@ -88,9 +88,10 @@ def run_monitor_worker():
 
             lead_status = "qualified" if score_val > 7 else "discovered"
 
-            # Convert float timestamp to datetime
             created_utc_ts = raw_post.get("created_utc")
-            if isinstance(created_utc_ts, (int, float)):
+            if isinstance(created_utc_ts, datetime):
+                created_utc_dt = created_utc_ts
+            elif isinstance(created_utc_ts, (int, float)):
                 created_utc_dt = datetime.utcfromtimestamp(created_utc_ts)
             else:
                 created_utc_dt = datetime.utcnow() # fallback

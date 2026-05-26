@@ -10,6 +10,7 @@ from automation.models.subreddit import Subreddit
 from automation.models.lead_posts import LeadPost
 from automation.models.logs import Logs
 from automation.models.settings import Settings
+from automation.models.keywords import Keyword
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
