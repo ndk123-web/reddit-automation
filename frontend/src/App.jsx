@@ -74,6 +74,7 @@ export default function App() {
   const [leadsPage, setLeadsPage] = useState(1);
   const [leadsFilter, setLeadsFilter] = useState({ status: "", minScore: "", subreddit: "" });
   const [subreddits, setSubreddits] = useState([]);
+  const [topSubreddits, setTopSubreddits] = useState([]);
   const [keywords, setKeywords] = useState([]);
   const [queue, setQueue] = useState([]);
   const [sequences, setSequences] = useState([]);
@@ -211,17 +212,50 @@ export default function App() {
   // API Fetch utilities
   const fetchAnalytics = async () => {
     try {
-      const res = await fetch(`${API_URL}/analytics`);
+      const res = await fetch(`${API_URL}/analytics/overview`);
       if (res.ok) {
-        setAnalytics(await res.json());
+        const data = await res.json();
+        
+        // Map backend funnel shape to frontend analytics shape
+        const discovered = data.discovered || 0;
+        const qualified = data.qualified || 0;
+        const queued = data.queued || 0;
+        const sent = data.sent || 0;
+        const replied = data.replied || 0;
+        const converted = data.converted || 0;
+
+        const conversion_rate = sent > 0 ? Math.round((replied / sent) * 1000) / 10 : 0;
+
+        setAnalytics({
+          total_leads: discovered,
+          discovered_leads: discovered,
+          qualified_leads: qualified,
+          queue_pending: queued,
+          outreach_sent: sent,
+          replied: replied,
+          converted: converted,
+          conversion_rate: conversion_rate
+        });
+
+        // Best-effort fetch for top subreddits
+        try {
+          const r2 = await fetch(`${API_URL}/analytics/subreddits?limit=6`);
+          if (r2.ok) {
+            const body = await r2.json();
+            setTopSubreddits(body.top_subreddits || body);
+          }
+        } catch (e) {
+          console.debug("Failed to fetch top subreddits", e);
+        }
       } else {
-        // Fallback to avoid empty dashboard if endpoint isn't ready
         setAnalytics({
           total_leads: leadsTotal || 0,
+          discovered_leads: leadsTotal || 0,
           qualified_leads: leads.filter(l => l.status === "qualified").length || 0,
           queue_pending: queue.length || 0,
           outreach_sent: leads.filter(l => l.status === "outreach_sent").length || 0,
           replied: leads.filter(l => l.status === "replied").length || 0,
+          converted: 0,
           conversion_rate: 0
         });
       }
@@ -229,10 +263,12 @@ export default function App() {
       console.error("Error fetching analytics:", e); 
       setAnalytics({
         total_leads: leadsTotal || 0,
+        discovered_leads: leadsTotal || 0,
         qualified_leads: leads.filter(l => l.status === "qualified").length || 0,
         queue_pending: queue.length || 0,
         outreach_sent: leads.filter(l => l.status === "outreach_sent").length || 0,
         replied: leads.filter(l => l.status === "replied").length || 0,
+        converted: 0,
         conversion_rate: 0
       });
     }
@@ -1467,12 +1503,12 @@ export default function App() {
                   
                   <div className="space-y-4.5 mt-5">
                     {[
-                      { stage: "Discovered", value: "2,847", width: "95%", bg: "bg-[#8b5cf6]" },
-                      { stage: "Qualified", value: "1,234", width: "55%", bg: "bg-[#6366f1]" },
-                      { stage: "Queued", value: "482", width: "35%", bg: "bg-[#3b82f6]" },
-                      { stage: "Sent", value: "892", width: "45%", bg: "bg-[#06b6d4]" },
-                      { stage: "Replied", value: "234", width: "25%", bg: "bg-[#10b981]" },
-                      { stage: "Converted", value: "67", width: "12%", bg: "bg-[#22c55e]" }
+                      { stage: "Discovered", value: analytics.discovered_leads || 0, width: `${Math.min(100, Math.max(2, ((analytics.discovered_leads || 0) / Math.max(1, analytics.discovered_leads || 1)) * 100))}%`, bg: "bg-[#8b5cf6]" },
+                      { stage: "Qualified", value: analytics.qualified_leads || 0, width: `${Math.min(100, Math.max(2, ((analytics.qualified_leads || 0) / Math.max(1, analytics.discovered_leads || 1)) * 100))}%`, bg: "bg-[#6366f1]" },
+                      { stage: "Queued", value: analytics.queue_pending || 0, width: `${Math.min(100, Math.max(2, ((analytics.queue_pending || 0) / Math.max(1, analytics.discovered_leads || 1)) * 100))}%`, bg: "bg-[#3b82f6]" },
+                      { stage: "Sent", value: analytics.outreach_sent || 0, width: `${Math.min(100, Math.max(2, ((analytics.outreach_sent || 0) / Math.max(1, analytics.discovered_leads || 1)) * 100))}%`, bg: "bg-[#06b6d4]" },
+                      { stage: "Replied", value: analytics.replied || 0, width: `${Math.min(100, Math.max(2, ((analytics.replied || 0) / Math.max(1, analytics.discovered_leads || 1)) * 100))}%`, bg: "bg-[#10b981]" },
+                      { stage: "Converted", value: analytics.converted || 0, width: `${Math.min(100, Math.max(2, ((analytics.converted || 0) / Math.max(1, analytics.discovered_leads || 1)) * 100))}%`, bg: "bg-[#22c55e]" }
                     ].map((fun, idx) => (
                       <div key={idx} className="flex items-center gap-3.5 text-xs font-semibold">
                         <span className="w-16 text-zinc-500 dark:text-zinc-400 font-bold text-right shrink-0 text-[11px]">{fun.stage}</span>
@@ -1561,21 +1597,19 @@ export default function App() {
                   </div>
 
                   <div className="space-y-3.5 mt-3">
-                    {[
-                      { name: "r/SaaS", count: "456 leads", dot: "bg-accentGreen" },
-                      { name: "r/startups", count: "389 leads", dot: "bg-accentGreen" },
-                      { name: "r/entrepreneur", count: "342 leads", dot: "bg-accentGreen" },
-                      { name: "r/marketing", count: "267 leads", dot: "bg-accentGreen" },
-                      { name: "r/business", count: "198 leads", dot: "bg-zinc-600" }
-                    ].map((sub, idx) => (
-                      <div key={idx} className="flex items-center justify-between text-xs py-2 border-b border-zinc-200 dark:border-zinc-800/40 last:border-0 font-semibold">
-                        <div className="flex items-center gap-2.5">
-                          <span className={`w-2.5 h-2.5 rounded-full ${sub.dot} animate-pulse`}></span>
-                          <span className="text-zinc-700 dark:text-zinc-300 font-bold">{sub.name}</span>
+                    {topSubreddits && topSubreddits.length > 0 ? (
+                      topSubreddits.map((sub, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-xs py-2 border-b border-zinc-200 dark:border-zinc-800/40 last:border-0 font-semibold">
+                          <div className="flex items-center gap-2.5">
+                            <span className={`w-2.5 h-2.5 rounded-full ${idx < 4 ? "bg-accentGreen" : "bg-zinc-600"} animate-pulse`}></span>
+                            <span className="text-zinc-700 dark:text-zinc-300 font-bold">{sub.subreddit}</span>
+                          </div>
+                          <span className="text-zinc-500 font-bold">{sub.leads} leads</span>
                         </div>
-                        <span className="text-zinc-500 font-bold">{sub.count}</span>
-                      </div>
-                    ))}
+                      ))
+                    ) : (
+                      <div className="text-zinc-500 text-xs text-center py-4">No top subreddits yet.</div>
+                    )}
                   </div>
                 </div>
 
