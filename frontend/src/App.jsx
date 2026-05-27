@@ -77,9 +77,12 @@ export default function App() {
   const [topSubreddits, setTopSubreddits] = useState([]);
   const [keywords, setKeywords] = useState([]);
   const [queue, setQueue] = useState([]);
+  const [outreachQueueTotal, setOutreachQueueTotal] = useState(0);
+  const [outreachQueueTotalPages, setOutreachQueueTotalPages] = useState(1);
   const [sequences, setSequences] = useState([]);
   const [logs, setLogs] = useState([]);
   const [logsPage, setLogsPage] = useState(1);
+  const [outreachQueuePage, setOutreachQueuePage] = useState(1);
   const [logsTotal, setLogsTotal] = useState(0);
   const [health, setHealth] = useState(null);
   const [blocked, setBlocked] = useState([]);
@@ -124,6 +127,10 @@ export default function App() {
   const [editingTemplateText, setEditingTemplateText] = useState("");
   const [previewTemplateText, setPreviewTemplateText] = useState("");
 
+  const [selectedQueueItem, setSelectedQueueItem] = useState(null);
+const [isQueueDrawerOpen, setIsQueueDrawerOpen] = useState(false);
+const [editedOutreachContent, setEditedOutreachContent] = useState("");
+
   // Simulated notifications
   const [notifications, setNotifications] = useState([
     { id: 1, text: "AI Qualified a new lead on r/saas with score 10/10!", time: "2m ago", read: false },
@@ -165,7 +172,6 @@ export default function App() {
       fetchAnalytics();
       fetchSubreddits();
       fetchKeywords();
-      fetchQueue();
       fetchSequences();
       fetchHealth();
       fetchBlocked();
@@ -208,6 +214,12 @@ export default function App() {
       fetchHealth();
     }
   }, [refreshTick]);
+
+  useEffect(() => {
+    if (isAuthenticated && !isCheckingAuth) {
+      fetchQueue();
+    }
+  }, [isAuthenticated, isCheckingAuth, outreachQueuePage]);
 
   // Keyboard shortcut for Search (⌘ K or Ctrl K)
   useEffect(() => {
@@ -346,8 +358,19 @@ export default function App() {
 
   const fetchQueue = async () => {
     try {
-      const res = await fetch(`${API_URL}/outreach/queue`);
-      if (res.ok) setQueue(await res.json());
+      const res = await fetch(`${API_URL}/outreach/queue?page=${outreachQueuePage}&limit=10`);
+      if (res.ok) {
+        const data = await res.json();
+        const items = Array.isArray(data) ? data : (data.items || []);
+
+        setQueue(items);
+        setOutreachQueueTotal(Array.isArray(data) ? items.length : (data.total || items.length));
+        setOutreachQueueTotalPages(Array.isArray(data) ? Math.max(1, Math.ceil(items.length / 10)) : (data.total_pages || 1));
+
+        if (!Array.isArray(data) && data.page && data.page !== outreachQueuePage) {
+          setOutreachQueuePage(data.page);
+        }
+      }
     } catch (e) { console.error(e); }
   };
 
@@ -797,6 +820,22 @@ export default function App() {
     if (diff < 86400) return `${Math.floor(diff / 3600)} hrs ago`;
     if (diff < 2592000) return `${Math.floor(diff / 86400)} days ago`;
     return date.toLocaleDateString();
+  };
+
+  const formatQueueScheduledTime = (item) => {
+    const scheduledTime = item.scheduled_for || item.next_action_at || item.outreach_sent_at || item.created_utc;
+    if (!scheduledTime) return "Schedule pending";
+
+    const date = new Date(scheduledTime);
+    if (Number.isNaN(date.getTime())) return "Schedule pending";
+
+    return date.toLocaleString([], {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
   };
 
   // Mapped list of subreddits with metrics fallbacks
@@ -2053,7 +2092,7 @@ export default function App() {
 
               <div className="glass-panel p-6 rounded-3xl border border-glassBorder space-y-4">
                 <div className="border-b border-zinc-200 dark:border-glassBorder/60 pb-3">
-                  <h4 className="font-extrabold text-sm text-zinc-700 dark:text-zinc-400">Scheduled Messages ({queue.length})</h4>
+                  <h4 className="font-extrabold text-sm text-zinc-700 dark:text-zinc-400">Scheduled Messages ({outreachQueueTotal})</h4>
                   <p className="text-[10px] text-zinc-500 mt-0.5">Pending approval before sending</p>
                 </div>
 
@@ -2061,9 +2100,9 @@ export default function App() {
                   {queue.map((item) => (
                     <div key={item.id} className="p-5 rounded-2xl bg-white dark:bg-darkCard border border-zinc-200 dark:border-zinc-800/80 flex items-center justify-between gap-6 transition-all duration-300 hover:border-zinc-700/60">
                       <div className="space-y-1">
-                        <h5 className="font-extrabold text-xs text-zinc-800 dark:text-zinc-150">u/{item.recipient}</h5>
+                        <h5 className="font-extrabold text-xs text-zinc-800 dark:text-zinc-150">u/{item.author_username}</h5>
                         <p className="text-[10px] text-zinc-500 font-semibold">
-                          Scheduled for tomorrow at 10:00 AM
+                          Scheduled for {formatQueueScheduledTime(item)}
                         </p>
                       </div>
 
@@ -2076,7 +2115,10 @@ export default function App() {
                         </button>
                         <button
                           onClick={() => {
-                            setNotice({ type: "success", text: "Outreach drafted edit drawer invoked." });
+                            // setNotice({ type: "success", text: "Outreach drafted edit drawer invoked." });
+                            setSelectedQueueItem(item);
+                            setEditedOutreachContent(item.outreach_content || "");
+                            setIsQueueDrawerOpen(true);
                           }}
                           className="px-3.5 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800/80 bg-zinc-100 dark:bg-zinc-900/50 hover:bg-zinc-200 dark:hover:bg-zinc-800/80 text-xs text-zinc-600 dark:text-zinc-400 font-bold transition-all duration-200"
                         >
@@ -2092,7 +2134,147 @@ export default function App() {
                   )}
                 </div>
               </div>
+
+              <div className="flex items-center justify-between mt-6">
+                <button
+                  disabled={outreachQueuePage === 1}
+                  onClick={() => setOutreachQueuePage((prev) => Math.max(prev - 1, 1))}
+                  className="px-4 py-2 rounded-xl border text-xs font-semibold disabled:opacity-40"
+                >
+                  Prev
+                </button>
+
+                <span className="text-xs text-zinc-500 font-semibold">
+                  Page {outreachQueuePage} of {outreachQueueTotalPages}
+                </span>
+
+                <button
+                  disabled={outreachQueuePage >= outreachQueueTotalPages}
+                  onClick={() => setOutreachQueuePage((prev) => Math.min(prev + 1, outreachQueueTotalPages))}
+                  className="px-4 py-2 rounded-xl border text-xs font-semibold disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
             </div>
+          )}
+
+          {isQueueDrawerOpen && selectedQueueItem && (
+  <div className="fixed inset-0 z-50 flex justify-end bg-black/30 backdrop-blur-sm">
+    <div className="w-full max-w-2xl h-full overflow-y-auto bg-white dark:bg-darkCard border-l border-zinc-200 dark:border-zinc-800 shadow-2xl p-6">
+
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-white">
+            Outreach Review
+          </h3>
+          <p className="text-xs text-zinc-500 mt-1">
+            u/{selectedQueueItem.author_username}
+          </p>
+        </div>
+
+        <button
+          onClick={() => setIsQueueDrawerOpen(false)}
+          className="text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="space-y-5">
+
+        {/* Post Meta */}
+        <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 p-4">
+          <p className="text-xs text-zinc-500 mb-2">Post Title</p>
+          <h4 className="font-semibold text-sm">
+            {selectedQueueItem.title}
+          </h4>
+        </div>
+
+        {/* AI Score */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="rounded-2xl border p-4">
+            <p className="text-xs text-zinc-500">AI Score</p>
+            <p className="text-lg font-bold mt-1">
+              {selectedQueueItem.ai_score}/10
+            </p>
+          </div>
+
+          <div className="rounded-2xl border p-4">
+            <p className="text-xs text-zinc-500">Sequence</p>
+            <p className="text-sm font-semibold mt-1 capitalize">
+              {selectedQueueItem.sequence_step}
+            </p>
+          </div>
+        </div>
+
+        {/* AI Reason */}
+        <div className="rounded-2xl border p-4">
+          <p className="text-xs text-zinc-500 mb-2">AI Reason</p>
+          <p className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
+            {selectedQueueItem.ai_reason}
+          </p>
+        </div>
+
+        {/* Original Content */}
+        <div className="rounded-2xl border p-4 max-h-48 overflow-y-auto">
+          <p className="text-xs text-zinc-500 mb-2">Original Reddit Post</p>
+          <p className="text-sm whitespace-pre-wrap leading-relaxed">
+            {selectedQueueItem.content}
+          </p>
+        </div>
+
+        {/* Editable Outreach */}
+        <div>
+          <label className="block text-xs font-semibold mb-2 text-zinc-500">
+            Outreach Message
+          </label>
+
+          <textarea
+            rows={8}
+            value={editedOutreachContent}
+            onChange={(e) => setEditedOutreachContent(e.target.value)}
+            className="w-full rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-4 text-sm resize-none outline-none"
+          />
+        </div>
+
+        {/* Link */}
+        <a
+          href={selectedQueueItem.post_url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-block text-sm text-accentPurple font-semibold hover:underline"
+        >
+          Open Reddit Post →
+        </a>
+
+        {/* Footer */}
+        <div className="flex justify-end gap-3 pt-4">
+          <button
+            onClick={() => setIsQueueDrawerOpen(false)}
+            className="px-4 py-2 rounded-xl border"
+          >
+            Cancel
+          </button>
+
+          <button
+            onClick={() => {
+              console.log("Save:", editedOutreachContent);
+              setNotice({
+                type: "success",
+                text: "Outreach content updated successfully.",
+              });
+              setIsQueueDrawerOpen(false);
+              // api call for updating outreach content in queue 
+            }}
+            className="px-5 py-2 rounded-xl bg-accentPurple text-white font-semibold"
+          >
+            Save Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
           )}
 
           {/* VIEW: MESSAGE TEMPLATES */}
