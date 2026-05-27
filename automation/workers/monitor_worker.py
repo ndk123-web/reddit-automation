@@ -1,3 +1,5 @@
+import os
+import time
 from automation.service.reddit_service import fetch_latest_posts
 from automation.service.ai_service import score_post
 from automation.service.db_tasks import fetch_subreddits, store_lead_posts
@@ -19,8 +21,25 @@ from datetime import datetime
 
 load_dotenv()
 
+LOCK_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "monitor.lock")
+
 
 def run_monitor_worker():
+    if os.path.exists(LOCK_FILE):
+        
+        # 600 seconds = 10 minutes, agar lock file 10 minutes se purana hai toh assume karo kuch gadbad hai aur delete kar do
+        if time.time() - os.path.getmtime(LOCK_FILE) > 600:
+            try:
+                os.remove(LOCK_FILE)
+            except OSError:
+                pass
+        else:
+            print("Monitor worker is already running. Skipping...")
+            return False
+
+    with open(LOCK_FILE, "w") as f:
+        f.write(str(time.time()))
+
     add_log("WORKER_START", "Starting Reddit Monitor Worker", "info")
     try:
         ALLOWED_SUB_REDDITS_LIST = fetch_subreddits()
@@ -133,3 +152,9 @@ def run_monitor_worker():
     finally:
         add_log("WORKER_END", "Monitor worker cycle finished", "info")
         flush_logs()  # DONT FORGET TO FLUSH!
+        if os.path.exists(LOCK_FILE):
+            try:
+                os.remove(LOCK_FILE)
+            except OSError:
+                pass
+    return True

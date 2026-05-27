@@ -4,6 +4,7 @@ from backend.routes.subreddit_routes import router as subreddit_router
 from backend.routes.lead_routes import router as lead_router
 from backend.routes.log_routes import router as log_router
 from backend.routes.analytics_routes import router as analytics_router
+from backend.routes.manual_worker_routes import router as manual_worker_router
 
 app = FastAPI()
 
@@ -19,3 +20,4 @@ app.include_router(subreddit_router)
 app.include_router(lead_router)
 app.include_router(log_router)
 app.include_router(analytics_router)
+app.include_router(manual_worker_router)
