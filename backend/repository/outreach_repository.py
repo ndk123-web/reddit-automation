@@ -32,3 +32,16 @@ def get_outreach_queue(page, limit, db):
         "limit": limit,
         "total_pages": total_pages,
     }
+
+
+def update_outreach_queue_item(db, item_id, outreach_content):
+    item = db.query(Outreach).filter(Outreach.id == item_id).first()
+    if not item:
+        return None
+
+    if outreach_content is not None:
+        item.outreach_content = outreach_content
+
+    db.commit()
+    db.refresh(item)
+    return item

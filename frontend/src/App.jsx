@@ -715,6 +715,34 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
     } catch (e) { console.error(e); }
   };
 
+  const handleSaveQueueItem = async () => {
+    if (!selectedQueueItem) return;
+
+    try {
+      const res = await fetch(`${API_URL}/outreach/queue/${selectedQueueItem.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ outreach_content: editedOutreachContent }),
+      });
+
+      if (res.ok) {
+        const updatedItem = await res.json();
+        setQueue((prev) => prev.map((item) => (item.id === updatedItem.id ? updatedItem : item)));
+        setSelectedQueueItem(updatedItem);
+        setEditedOutreachContent(updatedItem.outreach_content || "");
+        setNotice({ type: "success", text: "Outreach content updated successfully." });
+        setIsQueueDrawerOpen(false);
+        fetchQueue();
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        setNotice({ type: "error", text: errorData.detail || "Failed to update outreach content." });
+      }
+    } catch (e) {
+      console.error(e);
+      setNotice({ type: "error", text: "Network error while updating outreach content." });
+    }
+  };
+
   // Auth Screen Submit Handlers
   const handleAuthSubmit = (e) => {
     e.preventDefault();
@@ -2258,15 +2286,7 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
           </button>
 
           <button
-            onClick={() => {
-              console.log("Save:", editedOutreachContent);
-              setNotice({
-                type: "success",
-                text: "Outreach content updated successfully.",
-              });
-              setIsQueueDrawerOpen(false);
-              // api call for updating outreach content in queue 
-            }}
+            onClick={handleSaveQueueItem}
             className="px-5 py-2 rounded-xl bg-accentPurple text-white font-semibold"
           >
             Save Changes
