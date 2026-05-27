@@ -81,7 +81,7 @@ export default function App() {
   const [logs, setLogs] = useState([]);
   const [logsPage, setLogsPage] = useState(1);
   const [logsTotal, setLogsTotal] = useState(0);
-  const [health, setHealth] = useState([]);
+  const [health, setHealth] = useState(null);
   const [blocked, setBlocked] = useState([]);
   const [settings, setSettings] = useState([]);
   const [refreshTick, setRefreshTick] = useState(0);
@@ -378,7 +378,7 @@ export default function App() {
 
   const fetchHealth = async () => {
     try {
-      const res = await fetch(`${API_URL}/health`);
+      const res = await fetch(`${API_URL}/analytics/health`);
       if (res.ok) setHealth(await res.json());
     } catch (e) { console.error(e); }
   };
@@ -815,13 +815,14 @@ export default function App() {
   // Account Health values
   const healthStats = useMemo(() => {
     return {
-      karma: "15,432",
-      rateLimit: 67,
-      dailyCount: 23,
-      dailyLimit: 50,
-      shadowbanStatus: "Clear"
+      karma: health?.karma || "0",
+      rateLimit: health?.rateLimit || 0,
+      dailyCount: health?.dailyCount || 0,
+      dailyLimit: health?.dailyLimit || 50,
+      shadowbanStatus: health?.shadowbanStatus || "Unknown",
+      status: health?.status || "Loading..."
     };
-  }, []);
+  }, [health]);
 
   // Filtered Leads
   const filteredLeadsList = useMemo(() => {
@@ -2645,29 +2646,36 @@ export default function App() {
                   {[
                     { 
                       label: "OAuth Connection", 
-                      sub: "Connected and authenticated", 
-                      tag: "Active", 
-                      color: "bg-emerald-50 dark:bg-[#0f2d1e] text-emerald-600 dark:text-[#10b981] border-emerald-200 dark:border-[#047857]/30" 
+                      sub: healthStats.status === "Connected" ? "Connected and authenticated" : (healthStats.status === "No PRAW Credentials" ? "Missing Credentials" : healthStats.status), 
+                      tag: healthStats.status === "Connected" ? "Active" : (healthStats.status === "No PRAW Credentials" ? "Setup Needed" : "Failed"), 
+                      color: healthStats.status === "Connected" ? "bg-emerald-50 dark:bg-[#0f2d1e] text-emerald-600 dark:text-[#10b981] border-emerald-200 dark:border-[#047857]/30" : 
+                             (healthStats.status === "No PRAW Credentials" ? "bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-500 border-amber-200 dark:border-amber-700/30" : "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-500 border-red-200 dark:border-red-700/30"),
+                      dotColor: healthStats.status === "Connected" ? "bg-[#10b981] shadow-[0_0_12px_#10b981]" : 
+                                (healthStats.status === "No PRAW Credentials" ? "bg-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.5)]" : "bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.5)]")
                     },
                     { 
                       label: "API Endpoint", 
-                      sub: "Latency: 124ms", 
-                      tag: "Healthy", 
-                      color: "bg-emerald-50 dark:bg-[#0f2d1e] text-emerald-600 dark:text-[#10b981] border-emerald-200 dark:border-[#047857]/30" 
+                      sub: healthStats.status === "Connected" ? "Latency: 124ms" : "Unreachable", 
+                      tag: healthStats.status === "Connected" ? "Healthy" : "N/A", 
+                      color: healthStats.status === "Connected" ? "bg-emerald-50 dark:bg-[#0f2d1e] text-emerald-600 dark:text-[#10b981] border-emerald-200 dark:border-[#047857]/30" : 
+                             "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700",
+                      dotColor: healthStats.status === "Connected" ? "bg-[#10b981] shadow-[0_0_12px_#10b981]" : "bg-zinc-500 shadow-[0_0_12px_rgba(113,113,122,0.5)]"
                     },
                     { 
                       label: "Rate Limits", 
-                      sub: "Well within limits", 
-                      tag: "Normal", 
-                      color: "bg-emerald-50 dark:bg-[#0f2d1e] text-emerald-600 dark:text-[#10b981] border-emerald-200 dark:border-[#047857]/30" 
+                      sub: healthStats.status === "Connected" ? `Used limit: ${healthStats.rateLimit}%` : "Limits unavailable", 
+                      tag: healthStats.status === "Connected" ? (healthStats.rateLimit > 90 ? "Critical" : "Normal") : "Unknown", 
+                      color: healthStats.status === "Connected" ? (healthStats.rateLimit > 90 ? "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-500 border-red-200 dark:border-red-700/30" : "bg-emerald-50 dark:bg-[#0f2d1e] text-emerald-600 dark:text-[#10b981] border-emerald-200 dark:border-[#047857]/30") : 
+                             "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700",
+                      dotColor: healthStats.status === "Connected" ? (healthStats.rateLimit > 90 ? "bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.5)]" : "bg-[#10b981] shadow-[0_0_12px_#10b981]") : "bg-zinc-500 shadow-[0_0_12px_rgba(113,113,122,0.5)]"
                     }
                   ].map((conn, idx) => (
                     <div key={idx} className="p-4 rounded-xl bg-zinc-50 dark:bg-[#18182c]/40 border border-zinc-200 dark:border-zinc-800/80 flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <span className="w-2.5 h-2.5 rounded-full bg-[#10b981] shadow-[0_0_12px_#10b981] shrink-0"></span>
+                        <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${conn.dotColor}`}></span>
                         <div className="space-y-0.5">
                           <p className="text-sm font-extrabold text-zinc-900 dark:text-white">{conn.label}</p>
-                          <p className="text-xs text-zinc-500 font-semibold">{conn.sub}</p>
+                          <p className={`text-xs ${healthStats.status.startsWith("Error") && conn.label === "OAuth Connection" ? "text-red-500 truncate max-w-[150px]" : "text-zinc-500"} font-semibold`} title={conn.sub}>{conn.sub}</p>
                         </div>
                       </div>
                       <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border ${conn.color}`}>
