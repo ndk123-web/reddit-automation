@@ -84,6 +84,7 @@ export default function App() {
   const [health, setHealth] = useState([]);
   const [blocked, setBlocked] = useState([]);
   const [settings, setSettings] = useState([]);
+  const [refreshTick, setRefreshTick] = useState(0);
 
   // Live settings states (upgraded Settings panel)
   const [settingsMinScore, setSettingsMinScore] = useState(7);
@@ -185,16 +186,28 @@ export default function App() {
     }
   }, [isAuthenticated, isCheckingAuth, logsPage]);
 
-  // Auto-refresh Analytics every 30 seconds (Dashboard always stays updated)
+  // Auto-refresh clock (triggers a state update to pull fresh data without stale closures)
   useEffect(() => {
     if (isAuthenticated && !isCheckingAuth) {
       const interval = setInterval(() => {
-        console.log("Fetching Analytics 30 per second...")
-        fetchAnalytics();
+        setRefreshTick(tick => tick + 1);
       }, 30000); // 30 seconds
       return () => clearInterval(interval);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, isCheckingAuth]);
+
+  // Execute periodic fetches matching active state context
+  useEffect(() => {
+    if (refreshTick > 0 && isAuthenticated && !isCheckingAuth) {
+      console.log(`Background Sync [Tick: ${refreshTick}]... fetching fresh data`);
+      fetchAnalytics();
+      fetchSubreddits();
+      fetchQueue();
+      fetchLeads();
+      fetchLogs();
+      fetchHealth();
+    }
+  }, [refreshTick]);
 
   // Keyboard shortcut for Search (⌘ K or Ctrl K)
   useEffect(() => {
@@ -217,6 +230,7 @@ export default function App() {
         const data = await res.json();
         
         // Map backend funnel shape to frontend analytics shape
+        const total_leads = data.total_leads || 0;
         const discovered = data.discovered || 0;
         const qualified = data.qualified || 0;
         const queued = data.queued || 0;
@@ -227,7 +241,7 @@ export default function App() {
         const conversion_rate = sent > 0 ? Math.round((replied / sent) * 1000) / 10 : 0;
 
         setAnalytics({
-          total_leads: discovered,
+          total_leads: total_leads,
           discovered_leads: discovered,
           qualified_leads: qualified,
           queue_pending: queued,
@@ -319,7 +333,7 @@ export default function App() {
       console.error(e); 
     } finally {
       // Small timeout to prevent flicker if it loads too fast
-      setTimeout(() => setActionLoading(prev => prev === "fe  tch_subreddits" ? null : prev), 300);
+      setTimeout(() => setActionLoading(prev => prev === "fetch_subreddits" ? null : prev), 300);
     }
   };
 
@@ -792,11 +806,11 @@ export default function App() {
     return {
       total,
       active: activeCount,
-      leadsCount: leads.length * 37 + 124, 
-      qualifiedCount: leads.filter(l => l.ai_score >= 7).length * 12 + 67,
-      avgConversion: "51.8%"
+      leadsCount: analytics.total_leads || 0, 
+      qualifiedCount: analytics.qualified_leads || 0,
+      avgConversion: analytics.conversion_rate !== undefined ? `${analytics.conversion_rate}%` : '0%'
     };
-  }, [subreddits, leads]);
+  }, [subreddits, analytics]);
 
   // Account Health values
   const healthStats = useMemo(() => {
@@ -1936,8 +1950,8 @@ export default function App() {
                         onClick={() => handleToggleSubreddit(sub.id, sub.active, sub.name)}
                         className={`p-2 rounded-xl border transition-all ${
                           sub.active 
-                            ? "bg-zinc-50 dark:bg-zinc-950/20 text-zinc-500 dark:text-zinc-400 border-glassBorder hover:text-white" 
-                            : "bg-[#0f2d1e] text-[#10b981] border-[#047857]/30"
+                            ? "bg-[#0f2d1e] text-[#10b981] border-[#047857]/30"
+                            : "bg-zinc-50 dark:bg-zinc-950/20 text-zinc-500 dark:text-zinc-400 border-glassBorder hover:text-white"
                         }`}
                         title={sub.active ? "Pause Scanner" : "Resume Scanner"}
                       >

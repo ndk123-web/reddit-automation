@@ -5,6 +5,7 @@ from automation.models.outreach import Outreach
 
 
 def get_conversion_funnel(db: Session) -> dict:
+    total_leads = db.query(LeadPost).count()
     discovered = db.query(LeadPost).filter(LeadPost.status == "discovered").count()
     qualified = db.query(LeadPost).filter(LeadPost.status == "qualified").count()
 
@@ -22,6 +23,7 @@ def get_conversion_funnel(db: Session) -> dict:
     converted = db.query(LeadPost).filter(LeadPost.status == "converted").count()
 
     return {
+        "total_leads": total_leads,
         "discovered": discovered,
         "qualified": qualified,
         "queued": queued,
