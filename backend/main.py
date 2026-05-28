@@ -6,6 +6,8 @@ from backend.routes.log_routes import router as log_router
 from backend.routes.analytics_routes import router as analytics_router
 from backend.routes.manual_worker_routes import router as manual_worker_router
 from backend.routes.outreach_routes import router as outreach_router
+from backend.routes.reply_routes import router as reply_router
+from backend.routes.block_user_routes import router as block_user_router
 
 app = FastAPI()
 
@@ -23,3 +25,5 @@ app.include_router(log_router)
 app.include_router(analytics_router)
 app.include_router(manual_worker_router)
 app.include_router(outreach_router)
+app.include_router(reply_router)
+app.include_router(block_user_router)

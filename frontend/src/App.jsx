@@ -464,6 +464,27 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
     } finally { setActionLoading(null); }
   };
 
+  const handleTriggerReplyWorker = async () => {
+    try {
+      setActionLoading("reply");
+      const res = await fetch(`${API_URL}/outreach/trigger-reply`, { method: "POST" });
+      const data = await res.json();
+
+      if (res.ok) {
+        setNotice({ type: "success", text: data.message || "Reply worker completed successfully." });
+        fetchQueue();
+        fetchLogs();
+        fetchBlocked();
+      } else {
+        setNotice({ type: "error", text: data.detail || "Failed to process replies." });
+      }
+    } catch (e) {
+      setNotice({ type: "error", text: "Server network error occurred." });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handleUpdateLeadStatus = async (leadId, newStatus) => {
     try {
       const res = await fetch(`${API_URL}/leads/${leadId}`, {
@@ -584,7 +605,7 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
     e.preventDefault();
     if (!newBlocked.username) return;
     try {
-      const res = await fetch(`${API_URL}/blocked-users`, {
+      const res = await fetch(`${API_URL}/add-block-user`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newBlocked)
@@ -601,9 +622,13 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
   const handleDeleteBlocked = async (id) => {
     try {
       const res = await fetch(`${API_URL}/blocked-users/${id}`, { method: "DELETE" });
-      if (res.ok) {
+      // console.log("Delete blocked user response:", await res.json());
+      const data = await res.json()
+      if (data[1] != 404) {
         fetchBlocked();
         setNotice({ type: "success", text: "User removed from block list." });
+      }else {
+        setNotice({ type: "error", text: "User not found in block list." });
       }
     } catch (e) { console.error(e); }
   };
@@ -713,6 +738,34 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
         fetchLogs();
       }
     } catch (e) { console.error(e); }
+  };
+
+  const handleSaveQueueItem = async () => {
+    if (!selectedQueueItem) return;
+
+    try {
+      const res = await fetch(`${API_URL}/outreach/queue/${selectedQueueItem.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ outreach_content: editedOutreachContent }),
+      });
+
+      if (res.ok) {
+        const updatedItem = await res.json();
+        setQueue((prev) => prev.map((item) => (item.id === updatedItem.id ? updatedItem : item)));
+        setSelectedQueueItem(updatedItem);
+        setEditedOutreachContent(updatedItem.outreach_content || "");
+        setNotice({ type: "success", text: "Outreach content updated successfully." });
+        setIsQueueDrawerOpen(false);
+        fetchQueue();
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        setNotice({ type: "error", text: errorData.detail || "Failed to update outreach content." });
+      }
+    } catch (e) {
+      console.error(e);
+      setNotice({ type: "error", text: "Network error while updating outreach content." });
+    }
   };
 
   // Auth Screen Submit Handlers
@@ -1331,6 +1384,14 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
             >
               <Send className={`w-3.5 h-3.5 ${actionLoading === "queue" ? "animate-bounce text-white" : ""}`} />
               <span className="hidden sm:inline">Deliver Queue</span>
+            </button>
+            <button
+              onClick={handleTriggerReplyWorker}
+              disabled={actionLoading !== null}
+              className="px-3 py-1.5 rounded-lg border border-glassBorder bg-zinc-950/10 hover:bg-white/5 text-xs font-semibold flex items-center gap-1.5 disabled:opacity-50 text-zinc-800 dark:text-zinc-400"
+            >
+              <MessageSquare className={`w-3.5 h-3.5 ${actionLoading === "reply" ? "animate-pulse text-accentBlue" : ""}`} />
+              <span className="hidden sm:inline">Process Replies</span>
             </button>
           </div>
         </header>
@@ -2258,15 +2319,7 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
           </button>
 
           <button
-            onClick={() => {
-              console.log("Save:", editedOutreachContent);
-              setNotice({
-                type: "success",
-                text: "Outreach content updated successfully.",
-              });
-              setIsQueueDrawerOpen(false);
-              // api call for updating outreach content in queue 
-            }}
+            onClick={handleSaveQueueItem}
             className="px-5 py-2 rounded-xl bg-accentPurple text-white font-semibold"
           >
             Save Changes

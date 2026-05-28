@@ -152,3 +152,19 @@ def send_reddit_comment(reddit_post_id, body):
         add_log("REDDIT_COMMENT_ERROR", f"Failed to post comment to post {reddit_post_id}: {str(e)}", "error")
         print(f"[Reddit Outreach] Failed to post comment to post {reddit_post_id}: {e}")
         raise e
+
+
+def fetch_unread_inbox_messages():
+    """
+    Returns unread inbox messages for the authenticated account.
+    """
+    reddit = get_praw_client()
+    if not reddit:
+        add_log("REDDIT_INBOX_ERROR", "Reddit PRAW API credentials not configured, cannot read inbox", "error")
+        raise ValueError("Reddit PRAW API credentials must be configured to read inbox messages.")
+
+    try:
+        return list(reddit.inbox.unread(limit=None))
+    except Exception as e:
+        add_log("REDDIT_INBOX_ERROR", f"Failed to read unread inbox messages: {str(e)}", "error")
+        raise e

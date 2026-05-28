@@ -12,6 +12,7 @@ from automation.models.logs import Logs
 from automation.models.settings import Settings
 from automation.models.keywords import Keyword
 from automation.models.outreach import Outreach
+from automation.models.block_users import BlockedUser
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

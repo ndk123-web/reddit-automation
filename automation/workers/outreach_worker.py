@@ -190,42 +190,10 @@ def run_outreach_worker():
     add_log("OUTREACH_WORKER_START", "Starting outreach worker cycle", "info")
 
     try:
-        reddit_client = get_praw_client()
-        
-        # 1. Process Inbox for Replies (Reply Detection & Opt-outs)
-        if reddit_client:
-            try:
-                unread_messages = list(reddit_client.inbox.unread(limit=None))
-                for msg in unread_messages:
-                    body = msg.body.lower()
-                    author_name = msg.author.name if msg.author else None
-                    
-                    if author_name:
-                        # Find existing outreach
-                        existing_outreach = db.query(Outreach).filter(Outreach.author_username == author_name).first()
-                        if existing_outreach:
-                            if any(phrase in body for phrase in ["stop", "not interested", "unsubscribe", "don't message"]):
-                                existing_outreach.status = "opted_out"
-                                add_log("OUTREACH_OPT_OUT", f"User u/{author_name} opted out.", "warning")
-                            else:
-                                existing_outreach.status = "replied"
-                                add_log("OUTREACH_REPLY", f"User u/{author_name} replied! Pausing automation.", "success")
-                            existing_outreach.scheduled_for = None
-                            existing_outreach.next_action_at = None
-                            
-                            # Also update the lead status
-                            lead = db.query(LeadPost).filter(LeadPost.author_username == author_name).first()
-                            if lead:
-                                lead.status = "replied"
-                            db.commit()
-                    msg.mark_read()
-            except Exception as e:
-                add_log("INBOX_ERROR", f"Failed to check inbox: {e}", "error")
-
-        # 2. Stage new leads to Outreach
+        # 1. Stage new leads to Outreach
         queued_count = _queue_qualified_leads(db)
         
-        # 3. Process Sequence Steps
+        # 2. Process Sequence Steps
         now = datetime.utcnow()
         waiting_followups = db.query(Outreach).filter(
             Outreach.status.in_(["waiting_for_followup_1", "waiting_for_final"]),
@@ -245,7 +213,7 @@ def run_outreach_worker():
                 item.status = "ready"
                 db.commit()
 
-        # 4. Send due messages
+            # 3. Send due messages
         sent_count = _send_due_outreach(db)
 
         add_log(
