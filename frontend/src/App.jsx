@@ -584,7 +584,7 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
     e.preventDefault();
     if (!newBlocked.username) return;
     try {
-      const res = await fetch(`${API_URL}/blocked-users`, {
+      const res = await fetch(`${API_URL}/add-block-user`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newBlocked)
@@ -601,9 +601,13 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
   const handleDeleteBlocked = async (id) => {
     try {
       const res = await fetch(`${API_URL}/blocked-users/${id}`, { method: "DELETE" });
-      if (res.ok) {
+      // console.log("Delete blocked user response:", await res.json());
+      const data = await res.json()
+      if (data[1] != 404) {
         fetchBlocked();
         setNotice({ type: "success", text: "User removed from block list." });
+      }else {
+        setNotice({ type: "error", text: "User not found in block list." });
       }
     } catch (e) { console.error(e); }
   };
