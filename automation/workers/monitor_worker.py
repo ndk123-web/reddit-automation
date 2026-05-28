@@ -1,11 +1,13 @@
 import os
 import time
+from automation.config.settings import MIN_SCORE
 from automation.service.reddit_service import fetch_latest_posts
 from automation.service.ai_service import score_post
 from automation.service.db_tasks import fetch_subreddits, store_lead_posts
 from automation.utils.parse_response import parse_gemini_response
 from automation.utils.logger import add_log, flush_logs
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from automation.config.settings import MIN_SCORE
 from pprint import pprint
 from dotenv import load_dotenv
 from datetime import datetime
@@ -15,7 +17,7 @@ from datetime import datetime
         1. Fetch All Sub reddits that are (Active = True)
         2. Fetch 5  posts each from all subreddits
         3. Score it using AI and accept json with score
-        4. Store All whose threashold > 7 in posts 
+        4. Store All whose threashold > {MIN_SCORE} in posts 
 """
 
 
@@ -105,7 +107,7 @@ def run_monitor_worker():
             except ValueError:
                 score_val = 0
 
-            lead_status = "qualified" if score_val > 7 else "discovered"
+            lead_status = "qualified" if score_val > MIN_SCORE else "discovered"
 
             created_utc_ts = raw_post.get("created_utc")
             if isinstance(created_utc_ts, datetime):
