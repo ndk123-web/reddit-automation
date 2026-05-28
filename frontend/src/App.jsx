@@ -464,6 +464,27 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
     } finally { setActionLoading(null); }
   };
 
+  const handleTriggerReplyWorker = async () => {
+    try {
+      setActionLoading("reply");
+      const res = await fetch(`${API_URL}/outreach/trigger-reply`, { method: "POST" });
+      const data = await res.json();
+
+      if (res.ok) {
+        setNotice({ type: "success", text: data.message || "Reply worker completed successfully." });
+        fetchQueue();
+        fetchLogs();
+        fetchBlocked();
+      } else {
+        setNotice({ type: "error", text: data.detail || "Failed to process replies." });
+      }
+    } catch (e) {
+      setNotice({ type: "error", text: "Server network error occurred." });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handleUpdateLeadStatus = async (leadId, newStatus) => {
     try {
       const res = await fetch(`${API_URL}/leads/${leadId}`, {
@@ -1363,6 +1384,14 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
             >
               <Send className={`w-3.5 h-3.5 ${actionLoading === "queue" ? "animate-bounce text-white" : ""}`} />
               <span className="hidden sm:inline">Deliver Queue</span>
+            </button>
+            <button
+              onClick={handleTriggerReplyWorker}
+              disabled={actionLoading !== null}
+              className="px-3 py-1.5 rounded-lg border border-glassBorder bg-zinc-950/10 hover:bg-white/5 text-xs font-semibold flex items-center gap-1.5 disabled:opacity-50 text-zinc-800 dark:text-zinc-400"
+            >
+              <MessageSquare className={`w-3.5 h-3.5 ${actionLoading === "reply" ? "animate-pulse text-accentBlue" : ""}`} />
+              <span className="hidden sm:inline">Process Replies</span>
             </button>
           </div>
         </header>
