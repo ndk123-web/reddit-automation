@@ -103,6 +103,41 @@ def fetch_min_score():
         return None
     finally:       
         db.close()
+
+
+def fetch_outreach_window():
+    db = SessionLocal()
+
+    try:
+        start_setting = (
+            db.query(Settings)
+            .filter(Settings.key.in_(["outreach_window_start_hour", "outreach_window_start"]))
+            .order_by(Settings.id.asc())
+            .first()
+        )
+        end_setting = (
+            db.query(Settings)
+            .filter(Settings.key.in_(["outreach_window_end_hour", "outreach_window_end"]))
+            .order_by(Settings.id.asc())
+            .first()
+        )
+
+        start_hour = int(start_setting.value) if start_setting and str(start_setting.value).isdigit() else 10
+        end_hour = int(end_setting.value) if end_setting and str(end_setting.value).isdigit() else 18
+
+        add_log(
+            "DB_FETCH_OUTREACH_WINDOW",
+            f"Fetched outreach window: {start_hour}-{end_hour}",
+            "success",
+        )
+        return start_hour, end_hour
+    except Exception as e:
+        db.rollback()
+        print(e)
+        add_log("DB_ERROR", f"fetch_outreach_window failed: {str(e)}", "error")
+        return 10, 18
+    finally:
+        db.close()
     
     
 if __name__ == "__main__":

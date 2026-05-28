@@ -415,14 +415,73 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
 
   const fetchSettings = async () => {
     try {
-      const res = await fetch(`${API_URL}/settings`);
-      if (res.ok) {
-        const data = await res.json();
-        setSettings(data);
-        const minSc = data.find(s => s.key === "score_threshold");
-        if (minSc) setSettingsMinScore(parseInt(minSc.value, 10));
-        const maxMs = data.find(s => s.key === "daily_message_limit");
-        if (maxMs) setSettingsMaxMessages(parseInt(maxMs.value, 10));
+      const [settingsRes, minScoreRes, windowRes] = await Promise.all([
+        fetch(`${API_URL}/settings`),
+        fetch(`${API_URL}/settings/min-ai-score`),
+        fetch(`${API_URL}/settings/outreach-window`),
+      ]);
+
+      if (settingsRes.ok) {
+        const data = await settingsRes.json();
+        const settingsList = Array.isArray(data) ? data : (data.settings || []);
+        setSettings(settingsList);
+
+        const findValue = (key) => settingsList.find((setting) => setting.key === key)?.value;
+
+        const minScoreValue = findValue("score_threshold") ?? findValue("min_score");
+        if (minScoreValue !== undefined) {
+          const parsed = parseInt(minScoreValue, 10);
+          if (!Number.isNaN(parsed)) setSettingsMinScore(parsed);
+        }
+
+        const maxMessagesValue = findValue("daily_message_limit");
+        if (maxMessagesValue !== undefined) {
+          const parsed = parseInt(maxMessagesValue, 10);
+          if (!Number.isNaN(parsed)) setSettingsMaxMessages(parsed);
+        }
+
+        const intervalValue = findValue("message_interval_minutes") ?? findValue("message_interval");
+        if (intervalValue !== undefined) {
+          const parsed = parseInt(intervalValue, 10);
+          if (!Number.isNaN(parsed)) setSettingsInterval(parsed);
+        }
+
+        const modelValue = findValue("ai_model");
+        if (modelValue) setSettingsModel(modelValue);
+
+        const emailNotifValue = findValue("email_notifications");
+        if (emailNotifValue !== undefined) setSettingsEmailNotif(emailNotifValue === "true" || emailNotifValue === "1");
+
+        const highScoreNotifValue = findValue("high_score_notifications");
+        if (highScoreNotifValue !== undefined) setSettingsHighScoreNotif(highScoreNotifValue === "true" || highScoreNotifValue === "1");
+
+        const replyNotifValue = findValue("reply_notifications");
+        if (replyNotifValue !== undefined) setSettingsReplyNotif(replyNotifValue === "true" || replyNotifValue === "1");
+      }
+
+      if (minScoreRes.ok) {
+        const data = await minScoreRes.json();
+        const parsed = parseInt(data.min_ai_score ?? data.min_score ?? 7, 10);
+        if (!Number.isNaN(parsed)) setSettingsMinScore(parsed);
+      }
+
+      if (windowRes.ok) {
+        const data = await windowRes.json();
+        const startHour = parseInt(data.start_hour, 10);
+        const endHour = parseInt(data.end_hour, 10);
+
+        const formatHour = (hour) => {
+          if (Number.isNaN(hour)) return null;
+          const normalized = ((hour % 24) + 24) % 24;
+          const suffix = normalized >= 12 ? "PM" : "AM";
+          const displayHour = normalized % 12 || 12;
+          return `${String(displayHour).padStart(2, "0")}:00 ${suffix}`;
+        };
+
+        const formattedStart = formatHour(startHour);
+        const formattedEnd = formatHour(endHour);
+        if (formattedStart) setSettingsActiveStart(formattedStart);
+        if (formattedEnd) setSettingsActiveEnd(formattedEnd);
       }
     } catch (e) { console.error(e); }
   };
@@ -633,26 +692,66 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
     } catch (e) { console.error(e); }
   };
 
-  const handleUpdateSetting = async (id, newValue, desc) => {
+  const handleUpdateSetting = async (settingKey, newValue) => {
     try {
-      const res = await fetch(`${API_URL}/settings/${id}`, {
+      const res = await fetch(`${API_URL}/settings/${settingKey}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: newValue.toString(), description: desc })
+        body: JSON.stringify({ value: newValue.toString() })
       });
-      if (res.ok) {
-        fetchSettings();
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to update ${settingKey}`);
       }
-    } catch (e) { console.error(e); }
+
+      return res.json();
+    } catch (e) { 
+      console.error(e);
+      throw e;
+    }
   };
 
-  const handleSaveSettingsPanel = () => {
-    const minScSet = settings.find(s => s.key === "score_threshold");
-    const limitSet = settings.find(s => s.key === "daily_message_limit");
-    if (minScSet) handleUpdateSetting(minScSet.id, settingsMinScore, minScSet.description);
-    if (limitSet) handleUpdateSetting(limitSet.id, settingsMaxMessages, limitSet.description);
+  const parseHourSettingInput = (value) => {
+    if (typeof value === "number") return value;
+    if (!value) return null;
 
-    setNotice({ type: "success", text: "PulsePilot global settings successfully synchronized with SQLite database!" });
+    const normalizedValue = value.toString().trim().toUpperCase();
+    const hourMatch = normalizedValue.match(/^(\d{1,2})/);
+    if (!hourMatch) return null;
+
+    let hour = parseInt(hourMatch[1], 10);
+    if (Number.isNaN(hour)) return null;
+
+    if (normalizedValue.includes("PM") && hour < 12) hour += 12;
+    if (normalizedValue.includes("AM") && hour === 12) hour = 0;
+
+    return hour;
+  };
+
+  const handleSaveSettingsPanel = async () => {
+    const startHour = parseHourSettingInput(settingsActiveStart);
+    const endHour = parseHourSettingInput(settingsActiveEnd);
+
+    const updates = [
+      handleUpdateSetting("score_threshold", settingsMinScore),
+      handleUpdateSetting("daily_message_limit", settingsMaxMessages),
+      handleUpdateSetting("message_interval_minutes", settingsInterval),
+      handleUpdateSetting("ai_model", settingsModel),
+      handleUpdateSetting("email_notifications", settingsEmailNotif),
+      handleUpdateSetting("high_score_notifications", settingsHighScoreNotif),
+      handleUpdateSetting("reply_notifications", settingsReplyNotif),
+    ];
+
+    if (startHour !== null) updates.push(handleUpdateSetting("outreach_window_start_hour", startHour));
+    if (endHour !== null) updates.push(handleUpdateSetting("outreach_window_end_hour", endHour));
+
+    try {
+      await Promise.all(updates);
+      await fetchSettings();
+      setNotice({ type: "success", text: "PulsePilot global settings successfully synchronized with SQLite database!" });
+    } catch (e) {
+      setNotice({ type: "error", text: e.message || "Failed to save settings." });
+    }
   };
 
   const handleResetSettingsDefaults = () => {
