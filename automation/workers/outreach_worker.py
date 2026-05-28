@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-import os
 import random
 
 from automation.config.database import SessionLocal
+from automation.config.settings import MIN_SCORE, OUTREACH_WINDOW_START_HOUR, OUTREACH_WINDOW_END_HOUR
 from automation.models.lead_posts import LeadPost
 from automation.models.outreach import Outreach
 from automation.service.reddit_service import get_praw_client, send_reddit_dm
@@ -12,10 +12,7 @@ from automation.service.ai_service import generate_personalized_outreach
 from automation.utils.logger import add_log, flush_logs
 
 
-DEFAULT_WINDOW_START_HOUR = int(os.getenv("OUTREACH_WINDOW_START_HOUR", "10"))
-DEFAULT_WINDOW_END_HOUR = int(os.getenv("OUTREACH_WINDOW_END_HOUR", "18"))
-DEFAULT_SEND_BATCH_SIZE = int(os.getenv("OUTREACH_SEND_BATCH_SIZE", "1"))
-QUALIFIED_SCORE_THRESHOLD = int(os.getenv("OUTREACH_SCORE_THRESHOLD", "7"))
+DEFAULT_SEND_BATCH_SIZE = 1
 
 
 def _build_personalized_message(lead: LeadPost, sequence_step: str = "initial") -> str:
@@ -29,8 +26,8 @@ def _build_personalized_message(lead: LeadPost, sequence_step: str = "initial") 
 
 
 def _random_schedule_time(now: datetime) -> datetime:
-    start_hour = min(DEFAULT_WINDOW_START_HOUR, DEFAULT_WINDOW_END_HOUR)
-    end_hour = max(DEFAULT_WINDOW_START_HOUR, DEFAULT_WINDOW_END_HOUR)
+    start_hour = min(OUTREACH_WINDOW_START_HOUR, OUTREACH_WINDOW_END_HOUR)
+    end_hour = max(OUTREACH_WINDOW_START_HOUR, OUTREACH_WINDOW_END_HOUR)
 
     window_start = now.replace(hour=start_hour, minute=0, second=0, microsecond=0)
     window_end = now.replace(hour=end_hour, minute=0, second=0, microsecond=0)
@@ -55,7 +52,7 @@ def _queue_qualified_leads(db) -> int:
     leads = (
         db.query(LeadPost)
         .filter(LeadPost.status == "qualified")
-        .filter(LeadPost.ai_score >= QUALIFIED_SCORE_THRESHOLD)
+        .filter(LeadPost.ai_score >= MIN_SCORE)
         .order_by(LeadPost.created_utc.asc())
         .limit(5)
         .all()
