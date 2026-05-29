@@ -1,6 +1,7 @@
 from math import ceil
 
 from sqlalchemy import func
+from datetime import datetime
 
 from automation.models.outreach import Outreach
 
@@ -41,6 +42,29 @@ def update_outreach_queue_item(db, item_id, outreach_content):
 
     if outreach_content is not None:
         item.outreach_content = outreach_content
+
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+def approve_outreach_queue_item(db, item_id):
+    """Mark an outreach queue item as approved/sent.
+
+    This sets `status` to 'completed' and records `outreach_sent_at`.
+    The item will therefore no longer appear in the active queue (which
+    filters for pending/scheduled/ready/in_progress).
+    """
+    item = db.query(Outreach).filter(Outreach.id == item_id).first()
+    if not item:
+        return None
+
+    item.status = "completed"
+    item.outreach_sent_at = datetime.utcnow()
+    try:
+        item.attempt_count = (item.attempt_count or 0) + 1
+    except Exception:
+        item.attempt_count = 1
 
     db.commit()
     db.refresh(item)
