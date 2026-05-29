@@ -1,13 +1,53 @@
 from sqlalchemy.orm import Session
-from backend.repository.analytics_repository import get_conversion_funnel, get_top_subreddits
+
+from backend.repository.analytics_repository import (
+    get_conversion_funnel,
+    get_overview_summary,
+    get_weekly_trends,
+    get_conversion_trends,
+    get_subreddit_performance,
+    get_reply_rate_by_day,
+    get_ai_qualification_trends,
+    get_dashboard_analytics,
+    get_top_subreddits,
+)
 from automation.service.reddit_service import get_praw_client, check_shadowban
 from automation.models.logs import Logs
 from datetime import datetime, timedelta
 import os
-import random
 
 def fetch_conversion_funnel(db: Session):
-    return get_conversion_funnel(db)
+    payload = get_conversion_funnel(db)
+    payload["weekly_trends"] = get_weekly_trends(db)
+    return payload
+
+
+def fetch_analytics_summary(db: Session):
+    return get_overview_summary(db)
+
+
+def fetch_weekly_trends(db: Session):
+    return get_weekly_trends(db)
+
+
+def fetch_conversion_trends(db: Session):
+    return get_conversion_trends(db)
+
+
+def fetch_subreddit_performance(db: Session, limit: int = 5):
+    return get_subreddit_performance(db, limit)
+
+
+def fetch_reply_rate_by_day(db: Session):
+    return get_reply_rate_by_day(db)
+
+
+def fetch_ai_qualification_trends(db: Session):
+    return get_ai_qualification_trends(db)
+
+
+def fetch_dashboard_analytics(db: Session, limit: int = 5):
+    return get_dashboard_analytics(db, limit)
 
 
 def fetch_top_subreddits(db: Session, limit: int = 5):
