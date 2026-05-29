@@ -60,11 +60,24 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("overview");
   const [analytics, setAnalytics] = useState({
     total_leads: 0,
+    discovered_leads: 0,
     qualified_leads: 0,
     queue_pending: 0,
     outreach_sent: 0,
     replied: 0,
+    converted: 0,
+    avg_ai_score: 0,
+    reply_rate: 0,
+    qualification_rate: 0,
     conversion_rate: 0
+  });
+  const [analyticsDashboard, setAnalyticsDashboard] = useState({
+    weekly_trends: [],
+    conversion_trends: [],
+    subreddit_performance: [],
+    reply_rate_by_day: [],
+    ai_qualification_trends: [],
+    top_subreddits: []
   });
   const [leads, setLeads] = useState([]);
   const [hoveredTrendMonth, setHoveredTrendMonth] = useState("Mar");
@@ -237,20 +250,18 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
   // API Fetch utilities
   const fetchAnalytics = async () => {
     try {
-      const res = await fetch(`${API_URL}/analytics/overview`);
+      const res = await fetch(`${API_URL}/analytics/dashboard?limit=6`);
       if (res.ok) {
         const data = await res.json();
-        
-        // Map backend funnel shape to frontend analytics shape
-        const total_leads = data.total_leads || 0;
-        const discovered = data.discovered || 0;
-        const qualified = data.qualified || 0;
-        const queued = data.queued || 0;
-        const sent = data.sent || 0;
-        const replied = data.replied || 0;
-        const converted = data.converted || 0;
-
-        const conversion_rate = sent > 0 ? Math.round((replied / sent) * 1000) / 10 : 0;
+        const summary = data.summary || data;
+        const total_leads = summary.total_leads || 0;
+        const discovered = summary.discovered_leads || summary.discovered || 0;
+        const qualified = summary.qualified_leads || summary.qualified || 0;
+        const queued = summary.queue_pending || summary.queued || 0;
+        const sent = summary.outreach_sent || summary.sent || 0;
+        const replied = summary.replied || 0;
+        const converted = summary.converted || 0;
+        const conversion_rate = summary.conversion_rate ?? 0;
 
         setAnalytics({
           total_leads: total_leads,
@@ -260,19 +271,22 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
           outreach_sent: sent,
           replied: replied,
           converted: converted,
+          avg_ai_score: summary.avg_ai_score ?? 0,
+          reply_rate: summary.reply_rate ?? 0,
+          qualification_rate: summary.qualification_rate ?? 0,
           conversion_rate: conversion_rate
         });
 
-        // Best-effort fetch for top subreddits
-        try {
-          const r2 = await fetch(`${API_URL}/analytics/subreddits?limit=6`);
-          if (r2.ok) {
-            const body = await r2.json();
-            setTopSubreddits(body.top_subreddits || body);
-          }
-        } catch (e) {
-          console.debug("Failed to fetch top subreddits", e);
-        }
+        const topSubredditsPayload = data.top_subreddits || data.subreddit_performance || [];
+        setTopSubreddits(topSubredditsPayload);
+        setAnalyticsDashboard({
+          weekly_trends: data.weekly_trends || [],
+          conversion_trends: data.conversion_trends || [],
+          subreddit_performance: data.subreddit_performance || [],
+          reply_rate_by_day: data.reply_rate_by_day || [],
+          ai_qualification_trends: data.ai_qualification_trends || [],
+          top_subreddits: topSubredditsPayload
+        });
       } else {
         setAnalytics({
           total_leads: leadsTotal || 0,
@@ -283,6 +297,14 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
           replied: leads.filter(l => l.status === "replied").length || 0,
           converted: 0,
           conversion_rate: 0
+        });
+        setAnalyticsDashboard({
+          weekly_trends: [],
+          conversion_trends: [],
+          subreddit_performance: [],
+          reply_rate_by_day: [],
+          ai_qualification_trends: [],
+          top_subreddits: []
         });
       }
     } catch (e) { 
@@ -296,6 +318,14 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
         replied: leads.filter(l => l.status === "replied").length || 0,
         converted: 0,
         conversion_rate: 0
+      });
+      setAnalyticsDashboard({
+        weekly_trends: [],
+        conversion_trends: [],
+        subreddit_performance: [],
+        reply_rate_by_day: [],
+        ai_qualification_trends: [],
+        top_subreddits: []
       });
     }
   };
@@ -1613,16 +1643,24 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
                     
                     <div className="h-[210px] ml-7 relative select-none">
                       {(() => {
-                        const weeklyTrendsData = {
-                          Mon: { x: 0, y: 135, leads: 120, qualified: 85, tx: 10, ty: 60 },
-                          Tue: { x: 75, y: 152, leads: 148, qualified: 102, tx: 85, ty: 75 },
-                          Wed: { x: 168, y: 92, leads: 189, qualified: 134, tx: 178, ty: 40 },
-                          Thu: { x: 240, y: 56, leads: 172, qualified: 120, tx: 250, ty: 15 },
-                          Fri: { x: 305, y: 40, leads: 202, qualified: 145, tx: 215, ty: 10 },
-                          Sat: { x: 375, y: 98, leads: 135, qualified: 95, tx: 285, ty: 40 },
-                          Sun: { x: 450, y: 110, leads: 110, qualified: 75, tx: 360, ty: 50 }
-                        };
-                        const activeDay = weeklyTrendsData[hoveredWeekDay];
+                        const weeklySeries = analyticsDashboard.weekly_trends || [];
+                        const chartWidth = 450;
+                        const chartHeight = 180;
+                        const chartPaddingX = 18;
+                        const chartPaddingY = 18;
+                        const usableWidth = chartWidth - (chartPaddingX * 2);
+                        const usableHeight = chartHeight - (chartPaddingY * 2);
+                        const maxWeeklyValue = Math.max(1, ...weeklySeries.map((item) => Math.max(item.leads || 0, item.qualified || 0)));
+                        const points = weeklySeries.map((item, index) => {
+                          const x = weeklySeries.length > 1 ? chartPaddingX + ((index * usableWidth) / (weeklySeries.length - 1)) : chartWidth / 2;
+                          const y = chartPaddingY + ((1 - ((item.leads || 0) / maxWeeklyValue)) * usableHeight);
+                          return { ...item, x, y };
+                        });
+                        const linePath = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+                        const areaPath = points.length > 0
+                          ? `${linePath} L ${points[points.length - 1].x} ${chartHeight - chartPaddingY} L ${points[0].x} ${chartHeight - chartPaddingY} Z`
+                          : "";
+                        const activeDay = points.find((point) => point.label === hoveredWeekDay) || null;
                         return (
                           <svg className="w-full h-full" viewBox="0 0 450 180" preserveAspectRatio="none">
                             <defs>
@@ -1634,34 +1672,38 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
                                 <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000000" flood-opacity="0.5" />
                               </filter>
                             </defs>
-                            
-                            {/* Dotted horizontal grid lines */}
-                            <line x1="0" y1="1" x2="450" y2="1" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.07)'} strokeWidth="1" strokeDasharray="3 3" />
-                            <line x1="0" y1="45" x2="450" y2="45" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.07)'} strokeWidth="1" strokeDasharray="3 3" />
-                            <line x1="0" y1="90" x2="450" y2="90" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.07)'} strokeWidth="1" strokeDasharray="3 3" />
-                            <line x1="0" y1="135" x2="450" y2="135" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.07)'} strokeWidth="1" strokeDasharray="3 3" />
                             <line x1="0" y1="178" x2="450" y2="178" stroke={theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.12)'} strokeWidth="1" />
+                            {[1, 0.75, 0.5, 0.25, 0].map((tick) => {
+                              const y = chartPaddingY + (tick * usableHeight);
+                              const value = Math.round(maxWeeklyValue * tick);
+                              return (
+                                <g key={`weekly-tick-${tick}`}>
+                                  <line x1="0" y1={y} x2="450" y2={y} stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.07)'} strokeWidth="1" strokeDasharray="3 3" />
+                                  <text x="-6" y={y + 4} fill={theme === 'dark' ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.55)'} fontSize="10" fontWeight="bold" textAnchor="end">
+                                    {value}
+                                  </text>
+                                </g>
+                              );
+                            })}
                             
                             {/* Vertical hover line indicator */}
-                            {hoveredWeekDay && (
+                            {activeDay && (
                               <line x1={activeDay.x} y1="0" x2={activeDay.x} y2="180" stroke={theme === 'dark' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.25)'} strokeWidth="1" />
                             )}
 
-                            {/* Spline area */}
-                            <path 
-                              d="M 0 135 C 75 125, 110 170, 185 80 C 260 40, 315 150, 380 95 C 420 70, 450 110, 450 110 L 450 180 L 0 180 Z" 
-                              fill="url(#spline-grad)" 
-                            />
-                            {/* Spline curve path */}
-                            <path 
-                              d="M 0 135 C 75 125, 110 170, 185 80 C 260 40, 315 150, 380 95 C 420 70, 450 110, 450 110" 
-                              fill="none" 
-                              stroke="#8b5cf6" 
-                              strokeWidth="3.5" 
-                            />
+                            {points.length > 0 ? (
+                              <>
+                                <path d={areaPath} fill="url(#spline-grad)" />
+                                <path d={linePath} fill="none" stroke="#8b5cf6" strokeWidth="3.5" />
+                              </>
+                            ) : (
+                              <text x="225" y="95" fill={theme === 'dark' ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)'} fontSize="12" fontWeight="bold" textAnchor="middle">
+                                No weekly lead data yet
+                              </text>
+                            )}
 
                             {/* Active glowing dot */}
-                            {hoveredWeekDay && (
+                            {activeDay && (
                               <>
                                 <circle cx={activeDay.x} cy={activeDay.y} r="6.5" fill="#8b5cf6" stroke="#ffffff" strokeWidth="2.5" className="transition-all duration-200" />
                                 <circle cx={activeDay.x} cy={activeDay.y} r="12" fill="#8b5cf6" fillOpacity="0.2" className="transition-all duration-200" />
@@ -1669,25 +1711,25 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
                             )}
 
                             {/* Tooltip floating box */}
-                            {hoveredWeekDay && (
-                              <g transform={`translate(${activeDay.tx}, ${activeDay.ty})`} className="transition-all duration-300">
-                                <rect width="85" height="60" rx="8" fill="#0b0b14" stroke="rgba(255,255,255,0.1)" strokeWidth="1" filter="url(#weekly-tooltip-shadow)" />
-                                <text x="12" y="18" fill="#ffffff" fontSize="10" fontWeight="bold">{hoveredWeekDay}</text>
-                                <text x="12" y="34" fill="rgba(255,255,255,0.7)" fontSize="9" fontWeight="semibold">leads : <tspan fill="#3b82f6" fontWeight="bold">{activeDay.leads}</tspan></text>
-                                <text x="12" y="48" fill="#8b5cf6" fontSize="9" fontWeight="bold">qualified : <tspan fill="#ffffff">{activeDay.qualified}</tspan></text>
+                            {activeDay && (
+                              <g transform={`translate(${Math.min(activeDay.x + 14, 365)}, ${Math.max(activeDay.y - 20, 12)})`} className="transition-all duration-300">
+                                <rect width="95" height="62" rx="8" fill="#0b0b14" stroke="rgba(255,255,255,0.1)" strokeWidth="1" filter="url(#weekly-tooltip-shadow)" />
+                                <text x="12" y="18" fill="#ffffff" fontSize="10" fontWeight="bold">{activeDay.label}</text>
+                                <text x="12" y="35" fill="rgba(255,255,255,0.7)" fontSize="9" fontWeight="semibold">leads : <tspan fill="#3b82f6" fontWeight="bold">{activeDay.leads}</tspan></text>
+                                <text x="12" y="50" fill="#8b5cf6" fontSize="9" fontWeight="bold">qualified : <tspan fill="#ffffff">{activeDay.qualified}</tspan></text>
                               </g>
                             )}
 
                             {/* Hover Sensors */}
-                            {Object.entries(weeklyTrendsData).map(([d, pt]) => (
+                            {points.map((pt) => (
                               <circle
-                                key={`hover-${d}`}
+                                key={`hover-${pt.label}`}
                                 cx={pt.x}
                                 cy={pt.y}
                                 r="35"
                                 fill="transparent"
                                 className="cursor-pointer"
-                                onMouseEnter={() => setHoveredWeekDay(d)}
+                                onMouseEnter={() => setHoveredWeekDay(pt.label)}
                                 onMouseLeave={() => setHoveredWeekDay(null)}
                               />
                             ))}
@@ -2533,10 +2575,10 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 {[
-                  { label: "Avg. AI Score", value: "87.3", desc: "+3.2 from last month", icon: TrendingUp, iconColor: "text-accentPurple" },
-                  { label: "Reply Rate", value: "23.4%", desc: "+1.8% from last month", icon: Mail, iconColor: "text-accentBlue" },
-                  { label: "Conversion Rate", value: "14.5%", desc: "+2.1% from last month", icon: Activity, iconColor: "text-accentGreen" },
-                  { label: "Qualification Rate", value: "61.4%", desc: "+4.3% from last month", icon: Users, iconColor: "text-accentPurple" }
+                  { label: "Avg. AI Score", value: `${Number(analytics.avg_ai_score || 0).toFixed(1)}`, desc: "Derived from lead scoring data", icon: TrendingUp, iconColor: "text-accentPurple" },
+                  { label: "Reply Rate", value: `${Number(analytics.reply_rate || 0).toFixed(1)}%`, desc: "Replies divided by sent outreach", icon: Mail, iconColor: "text-accentBlue" },
+                  { label: "Conversion Rate", value: `${Number(analytics.conversion_rate || 0).toFixed(1)}%`, desc: "Converted leads divided by qualified leads", icon: Activity, iconColor: "text-accentGreen" },
+                  { label: "Qualification Rate", value: `${Number(analytics.qualification_rate || 0).toFixed(1)}%`, desc: "Qualified leads divided by total leads", icon: Users, iconColor: "text-accentPurple" }
                 ].map((stat, idx) => {
                   const Icon = stat.icon;
                   return (
@@ -2555,114 +2597,134 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 
                 {/* 1. Conversion Trends Line Graph */}
-                <div className="bg-white dark:bg-darkCard border border-zinc-200 dark:border-zinc-800/80 p-6 rounded-2xl shadow-premium">
+                <div className="bg-white dark:bg-darkCard border border-zinc-200 dark:border-zinc-800/80 p-6 rounded-2xl shadow-premium overflow-hidden">
                   <div className="mb-4">
                     <h4 className="font-extrabold text-sm text-zinc-800 dark:text-zinc-150">Conversion Trends</h4>
                     <p className="text-[10px] text-zinc-500 font-semibold mt-0.5">Lead progression over the last 5 months</p>
                   </div>
-                  <div className="h-64 mt-4 relative select-none">
+                  <div className="h-64 mt-4 relative select-none overflow-hidden">
                     {(() => {
-                      const trendMonthData = {
-                        Jan: { x: 60, y: 165, leads: 520, qualified: 290, converted: 60, tx: 68, ty: 125 },
-                        Feb: { x: 160, y: 140, leads: 610, qualified: 350, converted: 78, tx: 168, ty: 100 },
-                        Mar: { x: 260, y: 120, leads: 721, qualified: 421, converted: 98, tx: 268, ty: 125 },
-                        Apr: { x: 360, y: 85, leads: 840, qualified: 490, converted: 112, tx: 260, ty: 90 },
-                        May: { x: 460, y: 70, leads: 915, qualified: 560, converted: 130, tx: 360, ty: 75 }
-                      };
-                      const activeTrend = trendMonthData[hoveredTrendMonth] || trendMonthData["Mar"];
+                      const trendSeries = analyticsDashboard.conversion_trends || [];
+                      const chartWidth = 500;
+                      const chartHeight = 220;
+                      const chartPaddingLeft = 60;
+                      const chartPaddingRight = 20;
+                      const chartPaddingTop = 30;
+                      const chartPaddingBottom = 20;
+                      const usableWidth = chartWidth - chartPaddingLeft - chartPaddingRight;
+                      const usableHeight = chartHeight - chartPaddingTop - chartPaddingBottom;
+                      const maxTrendValue = Math.max(1, ...trendSeries.map((item) => Math.max(item.leads || 0, item.qualified || 0, item.converted || 0)));
+                      const points = trendSeries.map((item, index) => {
+                        const x = trendSeries.length > 1 ? chartPaddingLeft + ((index * usableWidth) / (trendSeries.length - 1)) : chartWidth / 2;
+                        const y = chartPaddingTop + ((1 - ((item.leads || 0) / maxTrendValue)) * usableHeight);
+                        return { ...item, x, y };
+                      });
+                      const activeTrend = points.find((point) => point.month === hoveredTrendMonth) || points[2] || points[0];
+                      const linePath = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+                      const areaPath = points.length > 0
+                        ? `${linePath} L ${points[points.length - 1].x} ${chartHeight - chartPaddingBottom} L ${points[0].x} ${chartHeight - chartPaddingBottom} Z`
+                        : "";
+                      const yTicks = [1, 0.75, 0.5, 0.25, 0];
                       return (
                         <svg className="w-full h-full" viewBox="0 0 500 220" preserveAspectRatio="none">
-                          {/* Grid Lines */}
-                          {(() => { const gH = theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.07)'; const gB = theme === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)'; const gV = theme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.05)'; return (<>
-                          <line x1="50" y1="30" x2="480" y2="30" stroke={gH} strokeDasharray="3 3" />
-                          <line x1="50" y1="72.5" x2="480" y2="72.5" stroke={gH} strokeDasharray="3 3" />
-                          <line x1="50" y1="115" x2="480" y2="115" stroke={gH} strokeDasharray="3 3" />
-                          <line x1="50" y1="157.5" x2="480" y2="157.5" stroke={gH} strokeDasharray="3 3" />
-                          <line x1="50" y1="200" x2="480" y2="200" stroke={gB} />
-                          <line x1="60" y1="30" x2="60" y2="200" stroke={gV} strokeDasharray="3 3" />
-                          <line x1="160" y1="30" x2="160" y2="200" stroke={gV} strokeDasharray="3 3" />
-                          <line x1="260" y1="30" x2="260" y2="200" stroke={gV} strokeDasharray="3 3" />
-                          <line x1="360" y1="30" x2="360" y2="200" stroke={gV} strokeDasharray="3 3" />
-                          <line x1="460" y1="30" x2="460" y2="200" stroke={gV} strokeDasharray="3 3" />
-                          </>); })()}
-                          
-                          {/* Vertical Indicator at hovered month */}
-                          {hoveredTrendMonth && (
-                            <line x1={activeTrend.x} y1="30" x2={activeTrend.x} y2="200" stroke={theme === 'dark' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.25)'} />
-                          )}
-
-                          {/* Y-Axis Labels */}
-                          {(() => { const tc = theme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'; return (<>
-                          <text x="35" y="34" fill={tc} fontSize="10" fontWeight="bold" textAnchor="end">1000</text>
-                          <text x="35" y="76.5" fill={tc} fontSize="10" fontWeight="bold" textAnchor="end">750</text>
-                          <text x="35" y="119" fill={tc} fontSize="10" fontWeight="bold" textAnchor="end">500</text>
-                          <text x="35" y="161.5" fill={tc} fontSize="10" fontWeight="bold" textAnchor="end">250</text>
-                          <text x="35" y="204" fill={tc} fontSize="10" fontWeight="bold" textAnchor="end">0</text>
-                          </>); })()}
-
                           <defs>
+                            <linearGradient id="conversion-trend-fill" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#10b981" stopOpacity="0.28" />
+                              <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+                            </linearGradient>
                             <filter id="tooltip-shadow" x="-30%" y="-30%" width="160%" height="160%">
                               <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000000" flood-opacity="0.5" />
                             </filter>
                           </defs>
 
-                          {/* Line Path */}
-                          <path 
-                            d="M 60 165 C 110 152, 110 148, 160 140 C 210 132, 210 126, 260 120 C 310 114, 310 95, 360 85 C 410 75, 410 72, 460 70" 
-                            fill="none" 
-                            stroke="#10b981" 
-                            strokeWidth="3.5" 
-                          />
+                          {yTicks.map((tick) => {
+                            const y = chartPaddingTop + (tick * usableHeight);
+                            const value = Math.round(maxTrendValue * tick);
+                            return (
+                              <line
+                                key={`conversion-grid-${tick}`}
+                                x1="50"
+                                y1={y}
+                                x2="480"
+                                y2={y}
+                                stroke={theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.07)'}
+                                strokeDasharray="3 3"
+                              />
+                            );
+                          })}
+                          <line x1="50" y1="200" x2="480" y2="200" stroke={theme === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)'} />
 
-                          {/* X-Axis Labels */}
-                          {(() => { const tc = theme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'; return (<>
-                          <text x="60" y="218" fill={tc} fontSize="10" fontWeight="bold" textAnchor="middle">Jan</text>
-                          <text x="160" y="218" fill={tc} fontSize="10" fontWeight="bold" textAnchor="middle">Feb</text>
-                          <text x="260" y="218" fill={tc} fontSize="10" fontWeight="bold" textAnchor="middle">Mar</text>
-                          <text x="360" y="218" fill={tc} fontSize="10" fontWeight="bold" textAnchor="middle">Apr</text>
-                          <text x="460" y="218" fill={tc} fontSize="10" fontWeight="bold" textAnchor="middle">May</text>
-                          </>); })()}
+                          {[1, 0.75, 0.5, 0.25, 0].map((tick) => {
+                            const y = chartPaddingTop + (tick * usableHeight);
+                            const value = Math.round(maxTrendValue * tick);
+                            return (
+                              <text key={`conversion-label-${tick}`} x="35" y={y + 4} fill={theme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'} fontSize="10" fontWeight="bold" textAnchor="end">
+                                {value}
+                              </text>
+                            );
+                          })}
 
-                          {/* Dots */}
-                          {Object.entries(trendMonthData).map(([m, pt]) => (
-                            <circle 
-                              key={m}
-                              cx={pt.x} 
-                              cy={pt.y} 
-                              r={hoveredTrendMonth === m ? "5.5" : "4.5"} 
-                              fill="#10b981" 
-                              stroke="#ffffff" 
-                              strokeWidth={hoveredTrendMonth === m ? "2" : "1.5"} 
-                              className="transition-all duration-200"
-                            />
-                          ))}
+                          {trendSeries.length > 1 && (
+                            <>
+                              <line x1={activeTrend.x} y1="30" x2={activeTrend.x} y2="200" stroke={theme === 'dark' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.25)'} />
+                              <path d={areaPath} fill="url(#conversion-trend-fill)" />
+                              <path d={linePath} fill="none" stroke="#10b981" strokeWidth="3.5" />
+                            </>
+                          )}
+
+                          {trendSeries.length === 0 && (
+                            <text x="270" y="120" fill={theme === 'dark' ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)'} fontSize="12" fontWeight="bold" textAnchor="middle">
+                              No monthly trend data yet
+                            </text>
+                          )}
                           
-                          {/* Active glowing dot */}
-                          {hoveredTrendMonth && (
+                          {activeTrend && (
                             <circle cx={activeTrend.x} cy={activeTrend.y} r="9" fill="#10b981" fillOpacity="0.25" className="transition-all duration-200" />
                           )}
 
-                          {/* Tooltip floating box */}
-                          {hoveredTrendMonth && (
-                            <g transform={`translate(${activeTrend.tx}, ${activeTrend.ty})`} className="transition-all duration-300">
+                          {activeTrend && (
+                            <circle cx={activeTrend.x} cy={activeTrend.y} r="5.5" fill="#10b981" stroke="#ffffff" strokeWidth="2" className="transition-all duration-200" />
+                          )}
+
+                          {activeTrend && (
+                            <g transform={`translate(${Math.min(activeTrend.x + 14, 380)}, ${Math.max(activeTrend.y - 20, 18)})`} className="transition-all duration-300">
                               <rect width="90" height="75" rx="8" fill="#0b0b14" stroke="rgba(255,255,255,0.1)" strokeWidth="1" filter="url(#tooltip-shadow)" />
-                              <text x="12" y="20" fill="#ffffff" fontSize="10" fontWeight="bold">{hoveredTrendMonth}</text>
+                              <text x="12" y="20" fill="#ffffff" fontSize="10" fontWeight="bold">{activeTrend.month}</text>
                               <text x="12" y="38" fill="rgba(255,255,255,0.7)" fontSize="9" fontWeight="semibold">leads : <tspan fill="#ffffff">{activeTrend.leads}</tspan></text>
                               <text x="12" y="52" fill="#8b5cf6" fontSize="9" fontWeight="bold">qualified : <tspan fill="#ffffff">{activeTrend.qualified}</tspan></text>
                               <text x="12" y="66" fill="#10b981" fontSize="9" fontWeight="bold">converted : <tspan fill="#ffffff">{activeTrend.converted}</tspan></text>
                             </g>
                           )}
 
+                          {points.map((point) => (
+                            <text key={`month-${point.month}`} x={point.x} y="218" fill={theme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'} fontSize="10" fontWeight="bold" textAnchor="middle">
+                              {point.month}
+                            </text>
+                          ))}
+
+                          {points.map((point) => (
+                            <circle 
+                              key={point.month}
+                              cx={point.x} 
+                              cy={point.y} 
+                              r={hoveredTrendMonth === point.month ? "5.5" : "4.5"} 
+                              fill="#10b981" 
+                              stroke="#ffffff" 
+                              strokeWidth={hoveredTrendMonth === point.month ? "2" : "1.5"} 
+                              className="transition-all duration-200"
+                            />
+                          ))}
+
                           {/* Hover Slices/Sensors */}
-                          {Object.entries(trendMonthData).map(([m, pt]) => (
+                          {points.map((point) => (
                             <circle
-                              key={`hover-${m}`}
-                              cx={pt.x}
-                              cy={pt.y}
+                              key={`hover-${point.month}`}
+                              cx={point.x}
+                              cy={point.y}
                               r="35"
                               fill="transparent"
                               className="cursor-pointer"
-                              onMouseEnter={() => setHoveredTrendMonth(m)}
+                              onMouseEnter={() => setHoveredTrendMonth(point.month)}
                               onMouseLeave={() => setHoveredTrendMonth(null)}
                             />
                           ))}
@@ -2678,38 +2740,79 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
                     <h4 className="font-extrabold text-sm text-zinc-800 dark:text-zinc-150">Subreddit Performance</h4>
                     <p className="text-[10px] text-zinc-500 font-semibold mt-0.5">Lead distribution by subreddit</p>
                   </div>
-                  <div className="h-64 mt-4 relative select-none">
-                    <svg className="w-full h-full" viewBox="0 0 500 220">
-                      {/* Solid Slices centered around (250, 110) with radius 70 */}
-                      {/* 1. r/SaaS 28% (Indigo) -> Angle 0 to 100.8 */}
-                      <path d="M 250 110 L 250 40 A 70 70 0 0 1 318.7 123.1 Z" fill="#8b5cf6" />
-                      
-                      {/* 2. r/business 12% (Green) -> Angle 100.8 to 144 */}
-                      <path d="M 250 110 L 318.7 123.1 A 70 70 0 0 1 291.1 166.7 Z" fill="#10b981" />
-                      
-                      {/* 3. r/marketing 16% (Cyan) -> Angle 144 to 201.6 */}
-                      <path d="M 250 110 L 291.1 166.7 A 70 70 0 0 1 224.5 175.5 Z" fill="#06b6d4" />
-                      
-                      {/* 4. r/entrepreneur 21% (Blue) -> Angle 201.6 to 277.2 */}
-                      <path d="M 250 110 L 224.5 175.5 A 70 70 0 0 1 180.6 100.8 Z" fill="#3b82f6" />
-                      
-                      {/* 5. r/startups 24% (Purple) -> Angle 277.2 to 360 */}
-                      <path d="M 250 110 L 180.6 100.8 A 70 70 0 0 1 250 40 Z" fill="#a855f7" />
+                  <div className="min-h-[320px] mt-4 relative select-none overflow-hidden">
+                    {(() => {
+                      const performanceSeries = analyticsDashboard.subreddit_performance || [];
+                      const colors = ["#8b5cf6", "#10b981", "#06b6d4", "#3b82f6", "#a855f7", "#f59e0b"];
+                      const radius = 70;
+                      const innerRadius = 42;
+                      const centerX = 170;
+                      const centerY = 110;
+                      const totalLeads = performanceSeries.reduce((sum, item) => sum + Math.max(0, item.leads || 0), 0);
+                      let startAngle = -90;
+                      const slices = performanceSeries
+                        .map((item, index) => {
+                          const sliceValue = Math.max(0, item.leads || 0);
+                          const angle = totalLeads > 0 ? (sliceValue / totalLeads) * 360 : 0;
+                          const endAngle = startAngle + angle;
+                          const startRadians = (Math.PI / 180) * startAngle;
+                          const endRadians = (Math.PI / 180) * endAngle;
+                          const x1 = centerX + (radius * Math.cos(startRadians));
+                          const y1 = centerY + (radius * Math.sin(startRadians));
+                          const x2 = centerX + (radius * Math.cos(endRadians));
+                          const y2 = centerY + (radius * Math.sin(endRadians));
+                          const largeArc = angle > 180 ? 1 : 0;
+                          const path = angle >= 360
+                            ? [
+                                `M ${centerX} ${centerY - radius}`,
+                                `A ${radius} ${radius} 0 1 1 ${centerX - 0.1} ${centerY - radius}`,
+                                `A ${radius} ${radius} 0 1 1 ${centerX} ${centerY - radius}`,
+                                "Z"
+                              ].join(" ")
+                            : angle > 0
+                              ? `M ${centerX} ${centerY} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`
+                              : null;
+                          startAngle = endAngle;
+                          return { ...item, path, color: colors[index % colors.length], angle };
+                        })
+                        .filter((item) => item.path);
 
-                      {/* Thin Pointer Lines */}
-                      <line x1="285" y1="75" x2="330" y2="75" stroke="rgba(255,255,255,0.25)" strokeWidth="1" />
-                      <line x1="305" y1="125" x2="325" y2="132" stroke="rgba(255,255,255,0.25)" strokeWidth="1" />
-                      <line x1="250" y1="170" x2="270" y2="185" stroke="rgba(255,255,255,0.25)" strokeWidth="1" />
-                      <line x1="200" y1="130" x2="175" y2="155" stroke="rgba(255,255,255,0.25)" strokeWidth="1" />
-                      <line x1="205" y1="85" x2="185" y2="85" stroke="rgba(255,255,255,0.25)" strokeWidth="1" />
+                      if (performanceSeries.length === 0 || totalLeads === 0) {
+                        return (
+                          <div className="h-full flex items-center justify-center text-xs text-zinc-500 italic">
+                            No subreddit performance data yet.
+                          </div>
+                        );
+                      }
 
-                      {/* Slices Labels pointing directly around the Pie Chart */}
-                      <text x="335" y="79" fill="#8b5cf6" fontSize="10" fontWeight="bold">r/SaaS 28%</text>
-                      <text x="330" y="137" fill="#10b981" fontSize="10" fontWeight="bold">r/business 12%</text>
-                      <text x="275" y="195" fill="#06b6d4" fontSize="10" fontWeight="bold">r/marketing 16%</text>
-                      <text x="170" y="160" fill="#3b82f6" fontSize="10" fontWeight="bold" textAnchor="end">r/entrepreneur 21%</text>
-                      <text x="180" y="89" fill="#a855f7" fontSize="10" fontWeight="bold" textAnchor="end">r/startups 24%</text>
-                    </svg>
+                      return (
+                        <div className="space-y-4">
+                          <svg className="w-full h-[170px]" viewBox="0 0 500 220" role="img" aria-label="Subreddit performance donut chart">
+                            {slices.map((slice) => (
+                              <path key={slice.subreddit} d={slice.path} fill={slice.color} />
+                            ))}
+                            <circle cx={centerX} cy={centerY} r={innerRadius} fill={theme === 'dark' ? '#0a0a12' : '#ffffff'} opacity="0.95" />
+                            <text x={centerX} y={centerY - 4} fill={theme === 'dark' ? '#ffffff' : '#111827'} fontSize="12" fontWeight="bold" textAnchor="middle">
+                              Top Subreddits
+                            </text>
+                            <text x={centerX} y={centerY + 12} fill={theme === 'dark' ? 'rgba(255,255,255,0.7)' : 'rgba(17,24,39,0.65)'} fontSize="9" fontWeight="600" textAnchor="middle">
+                              {totalLeads} total leads
+                            </text>
+                          </svg>
+                          <div className="grid grid-cols-2 gap-2">
+                            {slices.map((slice) => (
+                              <div key={slice.subreddit} className="flex items-center justify-between text-xs rounded-xl border border-zinc-200 dark:border-zinc-800/60 px-3 py-2 bg-zinc-50 dark:bg-[#18182c]/30">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: slice.color }}></span>
+                                  <span className="max-w-[120px] truncate text-zinc-700 dark:text-zinc-300 font-bold truncate">{slice.subreddit}</span>
+                                </div>
+                                <span className="text-zinc-500 font-bold">{slice.leads} leads · {Number(slice.angle / 3.6).toFixed(1)}%</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -2720,42 +2823,60 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
                     <p className="text-[10px] text-zinc-500 font-semibold mt-0.5">Average reply rates throughout the week</p>
                   </div>
                   <div className="h-64 mt-4 relative select-none">
-                    <svg className="w-full h-full" viewBox="0 0 500 220" preserveAspectRatio="none">
-                      {/* Grid Lines */}
-                      {(() => { const gH = theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.07)'; const gB = theme === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)'; const tc = theme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'; return (<>
-                      <line x1="50" y1="30" x2="480" y2="30" stroke={gH} strokeDasharray="3 3" />
-                      <line x1="50" y1="72.5" x2="480" y2="72.5" stroke={gH} strokeDasharray="3 3" />
-                      <line x1="50" y1="115" x2="480" y2="115" stroke={gH} strokeDasharray="3 3" />
-                      <line x1="50" y1="157.5" x2="480" y2="157.5" stroke={gH} strokeDasharray="3 3" />
-                      <line x1="50" y1="200" x2="480" y2="200" stroke={gB} />
-                      {/* Y-Axis Labels */}
-                      <text x="35" y="34" fill={tc} fontSize="10" fontWeight="bold" textAnchor="end">28</text>
-                      <text x="35" y="76.5" fill={tc} fontSize="10" fontWeight="bold" textAnchor="end">21</text>
-                      <text x="35" y="119" fill={tc} fontSize="10" fontWeight="bold" textAnchor="end">14</text>
-                      <text x="35" y="161.5" fill={tc} fontSize="10" fontWeight="bold" textAnchor="end">7</text>
-                      <text x="35" y="204" fill={tc} fontSize="10" fontWeight="bold" textAnchor="end">0</text>
-                      </>); })()}
+                    {(() => {
+                      const replySeries = analyticsDashboard.reply_rate_by_day || [];
+                      const chartHeight = 220;
+                      const chartPaddingTop = 30;
+                      const chartPaddingBottom = 20;
+                      const barTop = 30;
+                      const barBottom = 200;
+                      const barHeight = barBottom - barTop;
+                      const maxRate = Math.max(30, ...replySeries.map((item) => item.reply_rate || 0));
+                      const barSlots = [63, 123, 183, 243, 303, 363, 423];
+                      const bars = replySeries.map((item, index) => {
+                        const height = maxRate > 0 ? (Math.max(0, item.reply_rate || 0) / maxRate) * barHeight : 0;
+                        return {
+                          ...item,
+                          x: barSlots[index] || (63 + (index * 60)),
+                          y: barBottom - height,
+                          height,
+                        };
+                      });
 
-                      {/* Bars: Mon (18%), Tue (22%), Wed (26%), Thu (21%), Fri (28%), Sat (15%), Sun (12%) */}
-                      <rect x="63" y="91" width="24" height="109" rx="4" fill="#06b6d4" />
-                      <rect x="123" y="66.5" width="24" height="133.5" rx="4" fill="#06b6d4" />
-                      <rect x="183" y="42.2" width="24" height="157.8" rx="4" fill="#06b6d4" />
-                      <rect x="243" y="72.5" width="24" height="127.5" rx="4" fill="#06b6d4" />
-                      <rect x="303" y="30" width="24" height="170" rx="4" fill="#06b6d4" />
-                      <rect x="363" y="109" width="24" height="91" rx="4" fill="#06b6d4" />
-                      <rect x="423" y="127.2" width="24" height="72.8" rx="4" fill="#06b6d4" />
-
-                      {/* X-Axis Labels */}
-                      {(() => { const tc = theme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'; return (<>
-                      <text x="75" y="218" fill={tc} fontSize="10" fontWeight="bold" textAnchor="middle">Mon</text>
-                      <text x="135" y="218" fill={tc} fontSize="10" fontWeight="bold" textAnchor="middle">Tue</text>
-                      <text x="195" y="218" fill={tc} fontSize="10" fontWeight="bold" textAnchor="middle">Wed</text>
-                      <text x="255" y="218" fill={tc} fontSize="10" fontWeight="bold" textAnchor="middle">Thu</text>
-                      <text x="315" y="218" fill={tc} fontSize="10" fontWeight="bold" textAnchor="middle">Fri</text>
-                      <text x="375" y="218" fill={tc} fontSize="10" fontWeight="bold" textAnchor="middle">Sat</text>
-                      <text x="435" y="218" fill={tc} fontSize="10" fontWeight="bold" textAnchor="middle">Sun</text>
-                      </>); })()}
-                    </svg>
+                      return (
+                        <svg className="w-full h-full" viewBox="0 0 500 220" preserveAspectRatio="none">
+                          {bars.length > 0 ? (
+                            <>
+                              {[1, 0.75, 0.5, 0.25, 0].map((tick) => {
+                                const y = barTop + (tick * barHeight);
+                                const value = Math.round(maxRate * tick);
+                                return (
+                                  <g key={`reply-tick-${tick}`}>
+                                    <line x1="50" y1={y} x2="480" y2={y} stroke={theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.07)'} strokeDasharray="3 3" />
+                                    <text x="35" y={y + 4} fill={theme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'} fontSize="10" fontWeight="bold" textAnchor="end">
+                                      {value}
+                                    </text>
+                                  </g>
+                                );
+                              })}
+                              <line x1="50" y1="200" x2="480" y2="200" stroke={theme === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)'} />
+                              {bars.map((bar) => (
+                                <rect key={bar.day} x={bar.x} y={bar.y} width="24" height={Math.max(2, bar.height)} rx="4" fill="#06b6d4" />
+                              ))}
+                              {bars.map((bar) => (
+                                <text key={`reply-label-${bar.day}`} x={bar.x + 12} y="218" fill={theme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'} fontSize="10" fontWeight="bold" textAnchor="middle">
+                                  {bar.day}
+                                </text>
+                              ))}
+                            </>
+                          ) : (
+                            <text x="250" y="120" fill={theme === 'dark' ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)'} fontSize="12" fontWeight="bold" textAnchor="middle">
+                              No reply data yet
+                            </text>
+                          )}
+                        </svg>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -2767,40 +2888,29 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
                   </div>
                   <div className="h-64 mt-4 relative select-none">
                     {(() => {
-                      const qualMonthData = {
-                        Jan: { x: 60, y: 118, qualified: 290, tx: 68, ty: 85 },
-                        Feb: { x: 160, y: 101, qualified: 350, tx: 168, ty: 70 },
-                        Mar: { x: 260, y: 81, qualified: 421, tx: 268, ty: 50 },
-                        Apr: { x: 360, y: 61, qualified: 490, tx: 278, ty: 30 },
-                        May: { x: 460, y: 41.4, qualified: 560, tx: 378, ty: 15 }
-                      };
-                      const activeQual = qualMonthData[hoveredQualMonth] || qualMonthData["Mar"];
+                      const qualSeries = analyticsDashboard.ai_qualification_trends || [];
+                      const chartWidth = 500;
+                      const chartHeight = 220;
+                      const chartPaddingLeft = 60;
+                      const chartPaddingRight = 20;
+                      const chartPaddingTop = 30;
+                      const chartPaddingBottom = 20;
+                      const usableWidth = chartWidth - chartPaddingLeft - chartPaddingRight;
+                      const usableHeight = chartHeight - chartPaddingTop - chartPaddingBottom;
+                      const maxQualifiedValue = Math.max(1, ...qualSeries.map((item) => item.qualified || 0));
+                      const points = qualSeries.map((item, index) => {
+                        const x = qualSeries.length > 1 ? chartPaddingLeft + ((index * usableWidth) / (qualSeries.length - 1)) : chartWidth / 2;
+                        const y = chartPaddingTop + ((1 - ((item.qualified || 0) / maxQualifiedValue)) * usableHeight);
+                        return { ...item, x, y };
+                      });
+                      const activeQual = points.find((point) => point.month === hoveredQualMonth) || points[2] || points[0];
+                      const linePath = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+                      const areaPath = points.length > 0
+                        ? `${linePath} L ${points[points.length - 1].x} ${chartHeight - chartPaddingBottom} L ${points[0].x} ${chartHeight - chartPaddingBottom} Z`
+                        : "";
+                      const yTicks = [1, 0.75, 0.5, 0.25, 0];
                       return (
                         <svg className="w-full h-full" viewBox="0 0 500 220" preserveAspectRatio="none">
-                          {/* Grid Lines */}
-                          {(() => { const gH = theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.07)'; const gB = theme === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)'; const gV = theme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.05)'; const tc = theme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'; return (<>
-                          <line x1="50" y1="30" x2="480" y2="30" stroke={gH} strokeDasharray="3 3" />
-                          <line x1="50" y1="72.5" x2="480" y2="72.5" stroke={gH} strokeDasharray="3 3" />
-                          <line x1="50" y1="115" x2="480" y2="115" stroke={gH} strokeDasharray="3 3" />
-                          <line x1="50" y1="157.5" x2="480" y2="157.5" stroke={gH} strokeDasharray="3 3" />
-                          <line x1="50" y1="200" x2="480" y2="200" stroke={gB} />
-                          <line x1="60" y1="30" x2="60" y2="200" stroke={gV} strokeDasharray="3 3" />
-                          <line x1="160" y1="30" x2="160" y2="200" stroke={gV} strokeDasharray="3 3" />
-                          <line x1="260" y1="30" x2="260" y2="200" stroke={gV} strokeDasharray="3 3" />
-                          <line x1="360" y1="30" x2="360" y2="200" stroke={gV} strokeDasharray="3 3" />
-                          <line x1="460" y1="30" x2="460" y2="200" stroke={gV} strokeDasharray="3 3" />
-                          {/* Vertical Indicator at hovered month */}
-                          {hoveredQualMonth && (
-                            <line x1={activeQual.x} y1="30" x2={activeQual.x} y2="200" stroke={theme === 'dark' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.25)'} />
-                          )}
-                          {/* Y-Axis Labels */}
-                          <text x="35" y="34" fill={tc} fontSize="10" fontWeight="bold" textAnchor="end">600</text>
-                          <text x="35" y="76.5" fill={tc} fontSize="10" fontWeight="bold" textAnchor="end">450</text>
-                          <text x="35" y="119" fill={tc} fontSize="10" fontWeight="bold" textAnchor="end">300</text>
-                          <text x="35" y="161.5" fill={tc} fontSize="10" fontWeight="bold" textAnchor="end">150</text>
-                          <text x="35" y="204" fill={tc} fontSize="10" fontWeight="bold" textAnchor="end">0</text>
-                          </>); })()}
-
                           <defs>
                             <linearGradient id="gradient-qualification-area" x1="0" y1="0" x2="0" y2="1">
                               <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.25" />
@@ -2808,69 +2918,79 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
                             </linearGradient>
                           </defs>
 
-                          {/* Spline Area Gradient Fill */}
-                          <path 
-                            d="M 60 118 C 110 110, 110 105, 160 101 C 210 97, 210 87, 260 81 C 310 75, 310 67, 360 61 C 410 55, 410 47, 460 41.4 L 460 200 L 60 200 Z" 
-                            fill="url(#gradient-qualification-area)" 
-                          />
-
-                          {/* Spline Area Path */}
-                          <path 
-                            d="M 60 118 C 110 110, 110 105, 160 101 C 210 97, 210 87, 260 81 C 310 75, 310 67, 360 61 C 410 55, 410 47, 460 41.4" 
-                            fill="none" 
-                            stroke="#8b5cf6" 
-                            strokeWidth="3.5" 
-                          />
-
-                          {/* X-Axis Labels */}
-                          {(() => { const tc = theme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'; return (<>
-                          <text x="60" y="218" fill={tc} fontSize="10" fontWeight="bold" textAnchor="middle">Jan</text>
-                          <text x="160" y="218" fill={tc} fontSize="10" fontWeight="bold" textAnchor="middle">Feb</text>
-                          <text x="260" y="218" fill={tc} fontSize="10" fontWeight="bold" textAnchor="middle">Mar</text>
-                          <text x="360" y="218" fill={tc} fontSize="10" fontWeight="bold" textAnchor="middle">Apr</text>
-                          <text x="460" y="218" fill={tc} fontSize="10" fontWeight="bold" textAnchor="middle">May</text>
-                          </>); })()}
-
-                          {/* Dots - Only show single dot when hovered */}
-                          {Object.entries(qualMonthData).map(([m, pt]) => (
-                            hoveredQualMonth === m && (
-                              <circle 
-                                key={m}
-                                cx={pt.x} 
-                                cy={pt.y} 
-                                r="5.5" 
-                                fill="#8b5cf6" 
-                                stroke="#ffffff" 
-                                strokeWidth="2" 
-                                className="transition-all duration-200"
+                          {yTicks.map((tick) => {
+                            const y = chartPaddingTop + (tick * usableHeight);
+                            const value = Math.round(maxQualifiedValue * tick);
+                            return (
+                              <line
+                                key={`qual-grid-${tick}`}
+                                x1="50"
+                                y1={y}
+                                x2="480"
+                                y2={y}
+                                stroke={theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.07)'}
+                                strokeDasharray="3 3"
                               />
-                            )
-                          ))}
+                            );
+                          })}
+                          <line x1="50" y1="200" x2="480" y2="200" stroke={theme === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)'} />
+                          {[1, 0.75, 0.5, 0.25, 0].map((tick) => {
+                            const y = chartPaddingTop + (tick * usableHeight);
+                            const value = Math.round(maxQualifiedValue * tick);
+                            return (
+                              <text key={`qual-label-${tick}`} x="35" y={y + 4} fill={theme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'} fontSize="10" fontWeight="bold" textAnchor="end">
+                                {value}
+                              </text>
+                            );
+                          })}
 
-                          {/* Active glowing dot */}
-                          {hoveredQualMonth && (
+                          {activeQual && (
+                            <line x1={activeQual.x} y1="30" x2={activeQual.x} y2="200" stroke={theme === 'dark' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.25)'} />
+                          )}
+
+                          {points.length > 0 ? (
+                            <>
+                              <path d={areaPath} fill="url(#gradient-qualification-area)" />
+                              <path d={linePath} fill="none" stroke="#8b5cf6" strokeWidth="3.5" />
+                            </>
+                          ) : (
+                            <text x="270" y="120" fill={theme === 'dark' ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)'} fontSize="12" fontWeight="bold" textAnchor="middle">
+                              No qualification trend data yet
+                            </text>
+                          )}
+
+                          {activeQual && (
+                            <circle cx={activeQual.x} cy={activeQual.y} r="5.5" fill="#8b5cf6" stroke="#ffffff" strokeWidth="2" className="transition-all duration-200" />
+                          )}
+
+                          {activeQual && (
                             <circle cx={activeQual.x} cy={activeQual.y} r="9" fill="#8b5cf6" fillOpacity="0.25" className="transition-all duration-200" />
                           )}
 
-                          {/* Tooltip floating box */}
-                          {hoveredQualMonth && (
-                            <g transform={`translate(${activeQual.tx}, ${activeQual.ty})`} className="transition-all duration-300">
-                              <rect width="80" height="42" rx="6" fill="#0b0b14" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
-                              <text x="12" y="16" fill="#ffffff" fontSize="10" fontWeight="bold">{hoveredQualMonth}</text>
+                          {activeQual && (
+                            <g transform={`translate(${Math.min(activeQual.x + 14, 385)}, ${Math.max(activeQual.y - 20, 18)})`} className="transition-all duration-300">
+                              <rect width="90" height="50" rx="6" fill="#0b0b14" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
+                              <text x="12" y="16" fill="#ffffff" fontSize="10" fontWeight="bold">{activeQual.month}</text>
                               <text x="12" y="32" fill="#8b5cf6" fontSize="9" fontWeight="bold">qualified : <tspan fill="#ffffff">{activeQual.qualified}</tspan></text>
+                              <text x="12" y="44" fill="#10b981" fontSize="9" fontWeight="bold">avg score : <tspan fill="#ffffff">{Number(activeQual.avg_ai_score || 0).toFixed(1)}</tspan></text>
                             </g>
                           )}
 
-                          {/* Hover Slices/Sensors */}
-                          {Object.entries(qualMonthData).map(([m, pt]) => (
+                          {points.map((point) => (
+                            <text key={`qual-month-${point.month}`} x={point.x} y="218" fill={theme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'} fontSize="10" fontWeight="bold" textAnchor="middle">
+                              {point.month}
+                            </text>
+                          ))}
+
+                          {points.map((point) => (
                             <circle
-                              key={`hover-${m}`}
-                              cx={pt.x}
-                              cy={pt.y}
+                              key={`hover-${point.month}`}
+                              cx={point.x}
+                              cy={point.y}
                               r="35"
                               fill="transparent"
                               className="cursor-pointer"
-                              onMouseEnter={() => setHoveredQualMonth(m)}
+                              onMouseEnter={() => setHoveredQualMonth(point.month)}
                               onMouseLeave={() => setHoveredQualMonth(null)}
                             />
                           ))}
