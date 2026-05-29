@@ -1882,37 +1882,37 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
                   
                   {/* Karma Column */}
                   <div className="space-y-1.5">
-                    <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Karma</span>
-                    <h3 className="text-2xl font-black text-zinc-900 dark:text-white">15,432</h3>
+                    <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider"></span>
+                    <h3 className="text-2xl font-black text-zinc-900 dark:text-white">{healthStats.karma}</h3>
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[10px] font-black bg-emerald-50 dark:bg-[#0f2d1e] text-emerald-600 dark:text-[#10b981] border border-emerald-200 dark:border-[#047857]/30 shadow-sm uppercase tracking-wide">
-                      Healthy
+                      {healthStats.karma === "Error" ? "Error Fetching" : healthStats.karma >= 1000 ? "Healthy" : "At Risk"}
                     </span>
                   </div>
 
                   {/* API Rate Limit Column */}
                   <div className="space-y-1.5">
                     <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">API Rate Limit</span>
-                    <h3 className="text-2xl font-black text-zinc-900 dark:text-white">67%</h3>
+                    <h3 className="text-2xl font-black text-zinc-900 dark:text-white">{healthStats.rateLimit}</h3>
                     <div className="w-4/5 h-1.5 bg-zinc-200 dark:bg-zinc-950/60 rounded-full overflow-hidden border border-zinc-300 dark:border-zinc-850/40 mt-3">
-                      <div style={{ width: "67%" }} className="h-full bg-accentGreen rounded-full shadow-glow"></div>
+                      <div style={{ width: `${healthStats.rateLimit}%` }} className="h-full bg-accentGreen rounded-full shadow-glow"></div>
                     </div>
                   </div>
 
                   {/* Daily Messages Column */}
                   <div className="space-y-1.5">
                     <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Daily Messages</span>
-                    <h3 className="text-2xl font-black text-zinc-900 dark:text-white">23/50</h3>
+                    <h3 className="text-2xl font-black text-zinc-900 dark:text-white">{healthStats.dailyCount}/50</h3>
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[10px] font-black bg-blue-50 dark:bg-[#172554] text-blue-600 dark:text-[#3b82f6] border border-blue-200 dark:border-[#1d4ed8]/30 shadow-sm uppercase tracking-wide">
-                      On Track
+                      {healthStats.dailyCount < 40 ? "On Track" : healthStats.dailyCount < 50 ? "Approaching Limit" : "Limit Reached"}
                     </span>
                   </div>
 
                   {/* Shadow Ban Status Column */}
                   <div className="space-y-1.5">
                     <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Shadow Ban Status</span>
-                    <h3 className="text-2xl font-black text-zinc-900 dark:text-white">Clear</h3>
+                    <h3 className="text-2xl font-black text-zinc-900 dark:text-white">{healthStats.shadowBanStatus}</h3>
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[10px] font-black bg-emerald-50 dark:bg-[#0f2d1e] text-emerald-600 dark:text-[#10b981] border border-emerald-200 dark:border-[#047857]/30 shadow-sm uppercase tracking-wide">
-                      All Good
+                      {healthStats.shadowbanStatus === "Unknown" ? "Unknown" : healthStats.shadowBanStatus === "Not Shadow Banned" ? "Healthy" : "At Risk"}
                     </span>
                   </div>
 
