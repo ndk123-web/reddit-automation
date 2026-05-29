@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
-from backend.controller.outreach_controller import getQueueOutreach, updateQueueOutreach
+from backend.controller.outreach_controller import getQueueOutreach, updateQueueOutreach, approveQueueOutreach
 from automation.config.database import SessionLocal
 from sqlalchemy.orm import Session
 from backend.schemas.outreach_schema import OutreachUpdate
@@ -26,3 +26,11 @@ def update_outreach_queue(item_id: int, data: OutreachUpdate, db: Session = Depe
     if not updated_item:
         raise HTTPException(status_code=404, detail="Outreach queue item not found")
     return updated_item
+
+
+@router.delete("/outreach/queue/{item_id}")
+def approve_outreach_queue(item_id: int, db: Session = Depends(get_db)):
+    approved = approveQueueOutreach(item_id, db)
+    if not approved:
+        raise HTTPException(status_code=404, detail="Outreach queue item not found")
+    return {"status": "approved"}
