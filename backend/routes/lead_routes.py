@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from automation.config.database import SessionLocal
 from backend.schemas.lead_schema import LeadUpdate
-from backend.controller.lead_controller import fetch_leads, modify_lead, remove_lead
+from backend.controller.lead_controller import fetch_leads, fetch_all_leads, modify_lead, remove_lead
 
 router = APIRouter()
 
@@ -23,6 +23,16 @@ def get_leads_route(
     db: Session = Depends(get_db)
 ):
     return fetch_leads(db, page, limit, status, min_score, subreddit)
+
+
+@router.get("/leads/all")
+def get_all_leads_route(
+    status: str = None,
+    min_score: int = None,
+    subreddit: str = None,
+    db: Session = Depends(get_db)
+):
+    return fetch_all_leads(db, status, min_score, subreddit)
 
 @router.put("/leads/{lead_id}")
 def update_lead_route(lead_id: int, data: LeadUpdate, db: Session = Depends(get_db)):

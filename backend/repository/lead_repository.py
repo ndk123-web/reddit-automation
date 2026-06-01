@@ -14,6 +14,19 @@ def get_leads(db: Session, skip: int = 0, limit: int = 50, status: str = None, m
     items = query.order_by(LeadPost.created_utc.desc()).offset(skip).limit(limit).all()
     return {"items": items, "total": total}
 
+
+def get_all_leads(db: Session, status: str = None, min_score: int = None, subreddit: str = None):
+    query = db.query(LeadPost)
+    if status:
+        query = query.filter(LeadPost.status == status)
+    if min_score is not None:
+        query = query.filter(LeadPost.ai_score >= min_score)
+    if subreddit:
+        query = query.filter(LeadPost.subreddit_name == subreddit)
+
+    items = query.order_by(LeadPost.created_utc.desc()).all()
+    return {"items": items, "total": len(items)}
+
 def update_lead_status(db: Session, lead_id: int, status: str):
     lead = db.query(LeadPost).filter(LeadPost.id == lead_id).first()
     if lead:

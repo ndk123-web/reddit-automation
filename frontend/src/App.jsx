@@ -201,6 +201,12 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
 
   useEffect(() => {
     if (isAuthenticated && !isCheckingAuth) {
+      setLeadsPage(1);
+    }
+  }, [isAuthenticated, isCheckingAuth, leadsFilter.status, leadsFilter.minScore, leadsFilter.subreddit]);
+
+  useEffect(() => {
+    if (isAuthenticated && !isCheckingAuth) {
       fetchLogs();
     }
   }, [isAuthenticated, isCheckingAuth, logsPage]);
@@ -860,8 +866,13 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
   const handleApproveQueueItem = async (itemId) => {
     try {
       const res = await fetch(`${API_URL}/outreach/queue/${itemId}`, { method: "DELETE" }); 
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.status === "sent") {
+        setNotice({ type: "success", text: data.message || "Outreach message sent successfully." });
+      } else if (res.ok && data.status === "failed") {
+        setNotice({ type: "error", text: data.message || "Outreach message failed to send." });
+      }
       if (res.ok) {
-        setNotice({ type: "success", text: "Outreach message approved and sent immediately!" });
         fetchQueue();
         fetchAnalytics();
         fetchLogs();
@@ -1960,6 +1971,33 @@ const [editedOutreachContent, setEditedOutreachContent] = useState("");
                   </div>
                 ))}
               </div>
+
+                <div className="flex items-center justify-between gap-3 shrink-0 bg-white dark:bg-darkCard border border-zinc-200 dark:border-zinc-800/60 rounded-xl px-4 py-3">
+                  <button
+                    disabled={leadsPage === 1}
+                    onClick={() => setLeadsPage((prev) => Math.max(prev - 1, 1))}
+                    className="px-4 py-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/40 text-xs font-bold disabled:opacity-40"
+                  >
+                    Prev
+                  </button>
+
+                  <div className="text-center">
+                    <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                      Page {leadsPage} of {Math.max(1, Math.ceil((leadsTotal || 0) / 50))}
+                    </p>
+                    <p className="text-[10px] text-zinc-500 font-semibold">
+                      Showing {leads.length} leads from this page out of {leadsTotal || 0}
+                    </p>
+                  </div>
+
+                  <button
+                    disabled={leadsPage >= Math.max(1, Math.ceil((leadsTotal || 0) / 50))}
+                    onClick={() => setLeadsPage((prev) => Math.min(prev + 1, Math.max(1, Math.ceil((leadsTotal || 0) / 50))))}
+                    className="px-4 py-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/40 text-xs font-bold disabled:opacity-40"
+                  >
+                    Next
+                  </button>
+                </div>
 
               {/* 6 Column Kanban Pipeline Board exactly matching screenshot colors & elements */}
               <div className="flex-1 overflow-x-auto flex gap-6 pb-4 custom-scrollbar">
