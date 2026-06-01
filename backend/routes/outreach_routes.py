@@ -33,4 +33,14 @@ def approve_outreach_queue(item_id: int, db: Session = Depends(get_db)):
     approved = approveQueueOutreach(item_id, db)
     if not approved:
         raise HTTPException(status_code=404, detail="Outreach queue item not found")
-    return {"status": "approved"}
+    if approved.status == "sent":
+        return {
+            "status": "sent",
+            "message": "Outreach message sent successfully.",
+            "item": approved,
+        }
+    return {
+        "status": "failed",
+        "message": approved.last_error or "Failed to send outreach message.",
+        "item": approved,
+    }

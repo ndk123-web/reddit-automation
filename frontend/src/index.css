@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 /* Tailwind v4: enable class-based dark mode (uses .dark class on <html>) */
@@ -20,10 +20,10 @@
 
 :root {
   /* Premium Light Mode colors - Slate based */
-  --bg-darkBg: #f8fafc;        /* slate-50 */
-  --bg-darkCard: #ffffff;      /* white */
+  --bg-darkBg: #f8fafc; /* slate-50 */
+  --bg-darkCard: #ffffff; /* white */
   --border-glass: rgba(15, 23, 42, 0.08); /* slate border */
-  --text-foreground: #0f172a;  /* slate-900 */
+  --text-foreground: #0f172a; /* slate-900 */
   --text-glassMuted: rgba(15, 23, 42, 0.6);
   --bg-radial: radial-gradient(circle at 50% -20%, rgba(139, 92, 246, 0.05) 0%, transparent 60%);
   --bg-glass-panel: rgba(255, 255, 255, 0.75);
@@ -34,10 +34,10 @@
 
 .dark {
   /* Premium Dark Mode colors - Softer deep navy charcoal with rich contrast */
-  --bg-darkBg: #0b0b14;        /* softer deep navy charcoal */
-  --bg-darkCard: #141423;      /* rich charcoal navy card */
+  --bg-darkBg: #0b0b14; /* softer deep navy charcoal */
+  --bg-darkCard: #141423; /* rich charcoal navy card */
   --border-glass: rgba(255, 255, 255, 0.09);
-  --text-foreground: #ffffff;  /* bright crisp white text */
+  --text-foreground: #ffffff; /* bright crisp white text */
   --text-glassMuted: rgba(255, 255, 255, 0.65);
   --bg-radial: radial-gradient(circle at 50% -20%, rgba(99, 102, 241, 0.16) 0%, transparent 60%);
   --bg-glass-panel: rgba(20, 20, 35, 0.85);
@@ -53,7 +53,9 @@ body {
   margin: 0;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
 }
 
 /* Custom premium scrollbar */
@@ -88,7 +90,9 @@ body {
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-glass);
-  transition: background 0.3s ease, border-color 0.3s ease;
+  transition:
+    background 0.3s ease,
+    border-color 0.3s ease;
 }
 
 .glass-card {
@@ -102,12 +106,16 @@ body {
 .glass-card:hover {
   border-color: rgba(139, 92, 246, 0.3);
   transform: translateY(-2px);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12), 0 0 20px rgba(139, 92, 246, 0.05);
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.12),
+    0 0 20px rgba(139, 92, 246, 0.05);
 }
 
 .dark .glass-card:hover {
   border-color: rgba(255, 255, 255, 0.14);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4), 0 0 20px rgba(255, 255, 255, 0.02);
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.4),
+    0 0 20px rgba(255, 255, 255, 0.02);
 }
 
 /* Kanban column custom scrollbar */
@@ -124,7 +132,8 @@ body {
 
 /* Button pulse animations */
 @keyframes pulseGlow {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.2;
     transform: scale(1);
   }

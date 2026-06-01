@@ -34,8 +34,8 @@ def get_conversion_funnel(db: Session) -> dict:
     # queued: outreach items that are pending/scheduled/ready/in_progress
     queued = db.query(Outreach).filter(Outreach.status.in_(["pending", "scheduled", "ready", "in_progress"])) .count()
 
-    # sent: outreach completed
-    sent = db.query(Outreach).filter(Outreach.status == "completed").count()
+    # sent: any outreach item that has actually been sent
+    sent = db.query(Outreach).filter(Outreach.outreach_sent_at.isnot(None)).count()
 
     # replied: leads marked replied in lead_posts or outreach records
     replied_leads = db.query(LeadPost).filter(LeadPost.status == "replied").count()
@@ -209,7 +209,6 @@ def get_reply_rate_by_day(db: Session) -> list:
             func.sum(case((Outreach.status == "replied", 1), else_=0)).label("replied"),
         )
         .filter(sent_at.isnot(None))
-        .filter(Outreach.status.in_(["completed", "replied"]))
         .group_by(func.strftime("%w", sent_at))
         .all()
     )
