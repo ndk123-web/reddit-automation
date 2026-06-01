@@ -1,16 +1,15 @@
 import os
 import time
+from datetime import datetime
+from pprint import pprint
+
 from automation.config.settings import MIN_SCORE
 from automation.service.reddit_service import fetch_latest_posts
 from automation.service.ai_service import score_post
 from automation.service.db_tasks import fetch_subreddits, store_lead_posts
 from automation.utils.parse_response import parse_gemini_response
 from automation.utils.logger import add_log, flush_logs
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from automation.config.settings import MIN_SCORE
-from pprint import pprint
 from dotenv import load_dotenv
-from datetime import datetime
 
 """
     Steps:
@@ -23,12 +22,14 @@ from datetime import datetime
 
 load_dotenv()
 
-LOCK_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "monitor.lock")
+LOCK_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "monitor.lock"
+)
 
 
 def run_monitor_worker():
     if os.path.exists(LOCK_FILE):
-        
+
         # 600 seconds = 10 minutes, agar lock file 10 minutes se purana hai toh assume karo kuch gadbad hai aur delete kar do
         if time.time() - os.path.getmtime(LOCK_FILE) > 600:
             try:
@@ -49,23 +50,17 @@ def run_monitor_worker():
 
         print("Allowed:")
         pprint(ALLOWED_SUB_REDDITS_LIST)
-        
-        # Parallely Reddit APIs call karne ke liye ThreadPoolExecutor ka use
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            # Future mapping set karna (Thread assign karna)
-            future_to_sub = {
-                executor.submit(fetch_latest_posts, subreddit_name=sub): sub 
-                for sub in ALLOWED_SUB_REDDITS_LIST
-            }
-            
-            # Jaise jaise API responses aate jayenge waise waise add hote jayenge
-            for future in as_completed(future_to_sub):
-                sub = future_to_sub[future]
-                try:
-                    TOTAL_AGGREGATE_POSTS[sub] = future.result()
-                except Exception as exc:
-                    print(f"Thread failed for {sub}: {exc}")
-                    TOTAL_AGGREGATE_POSTS[sub] = []
+
+        # Sequential fetch to avoid bursting Reddit with simultaneous requests.
+        for index, sub in enumerate(ALLOWED_SUB_REDDITS_LIST):
+            if index > 0:
+                time.sleep(2)
+
+            try:
+                TOTAL_AGGREGATE_POSTS[sub] = fetch_latest_posts(subreddit_name=sub)
+            except Exception as exc:
+                print(f"Fetch failed for {sub}: {exc}")
+                TOTAL_AGGREGATE_POSTS[sub] = []
 
         print("\n--- Calling Gemini for lead scoring ---\n")
         score_lead_posts_text = score_post(TOTAL_AGGREGATE_POSTS)
@@ -115,7 +110,7 @@ def run_monitor_worker():
             elif isinstance(created_utc_ts, (int, float)):
                 created_utc_dt = datetime.utcfromtimestamp(created_utc_ts)
             else:
-                created_utc_dt = datetime.utcnow() # fallback
+                created_utc_dt = datetime.utcnow()  # fallback
 
             combined = {
                 "reddit_post_id": post_id,
@@ -133,12 +128,18 @@ def run_monitor_worker():
 
         print("\n--- Combining data and saving to Database ---\n")
         pprint(final_leads)
-        discovered_count = len([lead for lead in final_leads if lead["status"] == "discovered"])
-        qualified_count = len([lead for lead in final_leads if lead["status"] == "qualified"])
-        
+        discovered_count = len(
+            [lead for lead in final_leads if lead["status"] == "discovered"]
+        )
+        qualified_count = len(
+            [lead for lead in final_leads if lead["status"] == "qualified"]
+        )
+
         if final_leads:
             store_lead_posts(final_leads)
-            print(f"Successfully stored {len(final_leads)} leads: {qualified_count} qualified, {discovered_count} discovered.")
+            print(
+                f"Successfully stored {len(final_leads)} leads: {qualified_count} qualified, {discovered_count} discovered."
+            )
             add_log(
                 "WORKER_SUCCESS",
                 f"Processed {len(final_leads)} raw posts, stored {qualified_count} qualified and {discovered_count} discovered leads.",
@@ -146,7 +147,11 @@ def run_monitor_worker():
             )
         else:
             print("No raw posts were fetched.")
-            add_log("WORKER_SUCCESS", "No raw posts were fetched from active subreddits.", "info")
+            add_log(
+                "WORKER_SUCCESS",
+                "No raw posts were fetched from active subreddits.",
+                "info",
+            )
 
     except Exception as e:
         print(f"Worker crashed: {e}")
