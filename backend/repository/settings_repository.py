@@ -1,6 +1,7 @@
 from automation.models.settings import Settings
 from sqlalchemy.orm import Session
 
+
 def get_settings(db: Session):
     return db.query(Settings).all()
 
@@ -26,16 +27,18 @@ def upsert_setting_repo(db: Session, key: str, value: str):
     db.refresh(setting)
     return setting
 
+
 def get_min_ai_score_repo(db: Session):
-    
+
     setting = (
         db.query(Settings)
         .filter(Settings.key.in_(["min_score", "score_threshold"]))
         .first()
     )
-    
+
     min_score = int(setting.value) if setting and str(setting.value).isdigit() else None
     return min_score if min_score is not None else 7
+
 
 def update_min_ai_score_repo(db: Session, new_score: int):
     setting = (
@@ -43,7 +46,7 @@ def update_min_ai_score_repo(db: Session, new_score: int):
         .filter(Settings.key.in_(["min_score", "score_threshold"]))
         .first()
     )
-    
+
     if setting:
         setting.value = str(new_score)
     else:
@@ -58,7 +61,9 @@ def update_min_ai_score_repo(db: Session, new_score: int):
 def get_outreach_window_repo(db: Session):
     start_setting = (
         db.query(Settings)
-        .filter(Settings.key.in_(["outreach_window_start_hour", "outreach_window_start"]))
+        .filter(
+            Settings.key.in_(["outreach_window_start_hour", "outreach_window_start"])
+        )
         .first()
     )
     end_setting = (
@@ -67,8 +72,16 @@ def get_outreach_window_repo(db: Session):
         .first()
     )
 
-    start_hour = int(start_setting.value) if start_setting and str(start_setting.value).isdigit() else 10
-    end_hour = int(end_setting.value) if end_setting and str(end_setting.value).isdigit() else 18
+    start_hour = (
+        int(start_setting.value)
+        if start_setting and str(start_setting.value).isdigit()
+        else 10
+    )
+    end_hour = (
+        int(end_setting.value)
+        if end_setting and str(end_setting.value).isdigit()
+        else 18
+    )
 
     return {
         "start_hour": start_hour,
@@ -77,6 +90,8 @@ def get_outreach_window_repo(db: Session):
 
 
 def update_outreach_window_repo(db: Session, start_hour: int, end_hour: int):
-    start_setting = upsert_setting_repo(db, "outreach_window_start_hour", str(start_hour))
+    start_setting = upsert_setting_repo(
+        db, "outreach_window_start_hour", str(start_hour)
+    )
     end_setting = upsert_setting_repo(db, "outreach_window_end_hour", str(end_hour))
     return start_setting, end_setting

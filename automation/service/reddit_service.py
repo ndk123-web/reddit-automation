@@ -5,6 +5,43 @@ from datetime import datetime
 from automation.utils.logger import add_log
 
 
+def _build_reddit_headers():
+    user_agent = os.getenv(
+        "REDDIT_USER_AGENT",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125 Safari/537.36",
+    )
+    return {
+        "User-Agent": user_agent,
+        "Accept": "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.reddit.com/",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+    }
+
+
+def _safe_json_response(response, subreddit_name: str):
+    content_type = response.headers.get("Content-Type", "")
+    body_preview = (response.text or "")[:250].replace("\n", " ").replace("\r", " ")
+
+    if response.status_code != 200:
+        raise ValueError(
+            f"HTTP {response.status_code} while fetching r/{subreddit_name}; body preview: {body_preview}"
+        )
+
+    if "json" not in content_type.lower():
+        raise ValueError(
+            f"Non-JSON response for r/{subreddit_name}; content-type={content_type}; body preview: {body_preview}"
+        )
+
+    try:
+        return response.json()
+    except Exception as exc:
+        raise ValueError(
+            f"Invalid JSON response for r/{subreddit_name}: {exc}; body preview: {body_preview}"
+        ) from exc
+
+
 def get_praw_client():
     client_id = os.getenv("REDDIT_CLIENT_ID")
     client_secret = os.getenv("REDDIT_CLIENT_SECRET")
@@ -19,10 +56,29 @@ def get_praw_client():
                 client_secret=client_secret,
                 username=username,
                 password=password,
-                user_agent=user_agent
+                user_agent=user_agent,
             )
         except Exception as e:
             print(f"[Reddit Client] PRAW initialization failed: {e}")
+    return None
+
+
+def get_praw_read_client():
+    client_id = os.getenv("REDDIT_CLIENT_ID")
+    client_secret = os.getenv("REDDIT_CLIENT_SECRET")
+    user_agent = os.getenv("REDDIT_USER_AGENT", "PulsePilot Reddit Automator v1.0")
+
+    if client_id and client_secret:
+        try:
+            reddit = praw.Reddit(
+                client_id=client_id,
+                client_secret=client_secret,
+                user_agent=user_agent,
+            )
+            reddit.read_only = True
+            return reddit
+        except Exception as e:
+            print(f"[Reddit Client] PRAW read-only initialization failed: {e}")
     return None
 
 
@@ -30,59 +86,112 @@ def fetch_latest_posts(subreddit_name="startups", limit=5):
     """
     Fetches the latest posts from a subreddit using PRAW if configured, otherwise falls back to JSON scraping.
     """
-    reddit = get_praw_client()
+    subreddit_name = (subreddit_name or "").strip().lower()
+    reddit = get_praw_read_client()
     cleaned_posts = []
 
     if reddit:
         try:
-            add_log("REDDIT_FETCH_START", f"Fetching r/{subreddit_name} using PRAW", "info")
-            print(f"[Reddit Monitor] Fetching r/{subreddit_name} via PRAW")
+            add_log(
+                "REDDIT_FETCH_START",
+                f"Fetching r/{subreddit_name} using PRAW read-only",
+                "info",
+            )
+            print(f"[Reddit Monitor] Fetching r/{subreddit_name} via PRAW read-only")
             subreddit = reddit.subreddit(subreddit_name)
             for post in subreddit.new(limit=limit):
-                cleaned_posts.append({
-                    "reddit_post_id": post.id,
-                    "subreddit_name": subreddit_name,
-                    "author_username": post.author.name if post.author else "[deleted]",
-                    "title": post.title,
-                    "content": post.selftext,
-                    "post_url": f"https://reddit.com{post.permalink}",
-                    "created_utc": datetime.utcfromtimestamp(post.created_utc),
-                })
+                cleaned_posts.append(
+                    {
+                        "reddit_post_id": post.id,
+                        "subreddit_name": subreddit_name,
+                        "author_username": (
+                            post.author.name if post.author else "[deleted]"
+                        ),
+                        "title": post.title,
+                        "content": post.selftext,
+                        "post_url": f"https://reddit.com{post.permalink}",
+                        "created_utc": datetime.utcfromtimestamp(post.created_utc),
+                    }
+                )
             return cleaned_posts
         except Exception as e:
-            add_log("REDDIT_FETCH_ERROR", f"PRAW fetch failed for r/{subreddit_name}: {str(e)}. Falling back to JSON scraping.", "error")
-            print(f"[Reddit Monitor] PRAW fetch failed for r/{subreddit_name}: {e}. Falling back to JSON...")
+            add_log(
+                "REDDIT_FETCH_ERROR",
+                f"PRAW read-only fetch failed for r/{subreddit_name}: {str(e)}. Falling back to JSON scraping.",
+                "error",
+            )
+            print(
+                f"[Reddit Monitor] PRAW read-only fetch failed for r/{subreddit_name}: {e}. Falling back to JSON..."
+            )
 
-    # Fallback to public JSON endpoint (no auth needed, highly reliable for general reads)
+    # Fallback to public JSON endpoint (no auth needed, but Reddit can still rate-limit or challenge requests)
     try:
-        add_log("REDDIT_FETCH_START", f"Fetching r/{subreddit_name} via JSON scraping", "info")
+        add_log(
+            "REDDIT_FETCH_START",
+            f"Fetching r/{subreddit_name} via JSON scraping",
+            "info",
+        )
         print(f"[Reddit Monitor] Fetching r/{subreddit_name} via JSON scraping")
-        url = f"https://www.reddit.com/r/{subreddit_name}/new.json?limit={limit}"
-        headers = {"User-Agent": os.getenv("REDDIT_USER_AGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")}
-        response = requests.get(url, headers=headers, timeout=10)
-        
-        if response.status_code == 404:
-            print(f"[Reddit Monitor] Subreddit r/{subreddit_name} not found.")
+        candidate_urls = [
+            f"https://www.reddit.com/r/{subreddit_name}/new.json?limit={limit}&raw_json=1",
+            f"https://www.reddit.com/r/{subreddit_name}/new/.json?limit={limit}&raw_json=1",
+            f"https://old.reddit.com/r/{subreddit_name}/new.json?limit={limit}&raw_json=1",
+        ]
+
+        session = requests.Session()
+        session.headers.update(_build_reddit_headers())
+        response = None
+        last_error = None
+
+        for url in candidate_urls:
+            print(f"[Reddit Monitor] Fetching URL: {url}")
+            try:
+                response = session.get(url, timeout=15, allow_redirects=True)
+                if response.status_code == 404:
+                    print(f"[Reddit Monitor] Subreddit r/{subreddit_name} not found.")
+                    return []
+                data = _safe_json_response(response, subreddit_name)
+                break
+            except Exception as exc:
+                last_error = exc
+                add_log(
+                    "REDDIT_FETCH_ERROR",
+                    f"Public JSON fetch failed for r/{subreddit_name} at {url}: {str(exc)}",
+                    "error",
+                )
+                print(
+                    f"[Reddit Monitor] Public JSON fetch failed for r/{subreddit_name} at {url}: {exc}"
+                )
+                data = None
+
+        if not response or data is None:
+            if last_error:
+                raise last_error
             return []
-            
-        data = response.json()
+
         posts = data.get("data", {}).get("children", [])
 
         for post in posts:
             post_data = post.get("data", {})
             created_utc_ts = post_data.get("created_utc", datetime.utcnow().timestamp())
-            cleaned_posts.append({
-                "reddit_post_id": post_data.get("id"),
-                "subreddit_name": post_data.get("subreddit"),
-                "author_username": post_data.get("author", "[deleted]"),
-                "title": post_data.get("title", ""),
-                "content": post_data.get("selftext", ""),
-                "post_url": f"https://reddit.com{post_data.get('permalink', '')}",
-                "created_utc": datetime.utcfromtimestamp(created_utc_ts),
-            })
+            cleaned_posts.append(
+                {
+                    "reddit_post_id": post_data.get("id"),
+                    "subreddit_name": post_data.get("subreddit"),
+                    "author_username": post_data.get("author", "[deleted]"),
+                    "title": post_data.get("title", ""),
+                    "content": post_data.get("selftext", ""),
+                    "post_url": f"https://reddit.com{post_data.get('permalink', '')}",
+                    "created_utc": datetime.utcfromtimestamp(created_utc_ts),
+                }
+            )
         return cleaned_posts
     except Exception as e:
-        add_log("REDDIT_FETCH_ERROR", f"JSON fetch failed for r/{subreddit_name}: {str(e)}", "error")
+        add_log(
+            "REDDIT_FETCH_ERROR",
+            f"JSON fetch failed for r/{subreddit_name}: {str(e)}",
+            "error",
+        )
         print(f"[Reddit Monitor] JSON fetch failed for r/{subreddit_name}: {e}")
         return []
 
@@ -93,19 +202,33 @@ def check_shadowban(username):
     If the about.json returns 404, or has suspensions, it is shadowbanned.
     """
     url = f"https://www.reddit.com/user/{username}/about.json"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    }
     try:
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 404:
-            add_log("REDDIT_SHADOWBAN_CHECK", f"User u/{username} not found (404) - likely shadowbanned or deleted", "warning")
+            add_log(
+                "REDDIT_SHADOWBAN_CHECK",
+                f"User u/{username} not found (404) - likely shadowbanned or deleted",
+                "warning",
+            )
             return True  # 404 User Not Found usually indicates a shadowban or deletion
         if response.status_code == 200:
             data = response.json()
             if "error" in data or data.get("data", {}).get("is_suspended"):
-                add_log("REDDIT_SHADOWBAN_CHECK", f"User u/{username} is suspended or has an error in about.json - likely shadowbanned", "warning")
+                add_log(
+                    "REDDIT_SHADOWBAN_CHECK",
+                    f"User u/{username} is suspended or has an error in about.json - likely shadowbanned",
+                    "warning",
+                )
                 return True
-            
-            add_log("REDDIT_SHADOWBAN_CHECK", f"User u/{username} is active and not shadowbanned", "success")
+
+            add_log(
+                "REDDIT_SHADOWBAN_CHECK",
+                f"User u/{username} is active and not shadowbanned",
+                "success",
+            )
             return False
         return False
     except Exception as e:
@@ -119,16 +242,26 @@ def send_reddit_dm(recipient, subject, body):
     """
     reddit = get_praw_client()
     if not reddit:
-        add_log("REDDIT_DM_ERROR", "Reddit PRAW API credentials not configured, cannot send DM", "error")
+        add_log(
+            "REDDIT_DM_ERROR",
+            "Reddit PRAW API credentials not configured, cannot send DM",
+            "error",
+        )
         raise ValueError("Reddit PRAW API credentials must be configured to send DMs.")
-    
+
     try:
         reddit.redditor(recipient).message(subject=subject, message=body)
         print(f"[Reddit Outreach] Successfully sent DM to u/{recipient}")
-        add_log("REDDIT_DM_SUCCESS", f"Sent DM to u/{recipient} with subject '{subject}'", "success")
+        add_log(
+            "REDDIT_DM_SUCCESS",
+            f"Sent DM to u/{recipient} with subject '{subject}'",
+            "success",
+        )
         return True
     except Exception as e:
-        add_log("REDDIT_DM_ERROR", f"Failed to send DM to u/{recipient}: {str(e)}", "error")
+        add_log(
+            "REDDIT_DM_ERROR", f"Failed to send DM to u/{recipient}: {str(e)}", "error"
+        )
         print(f"[Reddit Outreach] Failed to send DM to u/{recipient}: {e}")
         raise e
 
@@ -139,17 +272,33 @@ def send_reddit_comment(reddit_post_id, body):
     """
     reddit = get_praw_client()
     if not reddit:
-        add_log("REDDIT_COMMENT_ERROR", "Reddit PRAW API credentials not configured, cannot send comment", "error")
-        raise ValueError("Reddit PRAW API credentials must be configured to send comments.")
-        
+        add_log(
+            "REDDIT_COMMENT_ERROR",
+            "Reddit PRAW API credentials not configured, cannot send comment",
+            "error",
+        )
+        raise ValueError(
+            "Reddit PRAW API credentials must be configured to send comments."
+        )
+
     try:
         submission = reddit.submission(id=reddit_post_id)
         reply = submission.reply(body)
-        print(f"[Reddit Outreach] Successfully posted public comment reply to post {reddit_post_id}")
-        add_log("REDDIT_COMMENT_SUCCESS", f"Posted comment reply to post {reddit_post_id}", "success")
+        print(
+            f"[Reddit Outreach] Successfully posted public comment reply to post {reddit_post_id}"
+        )
+        add_log(
+            "REDDIT_COMMENT_SUCCESS",
+            f"Posted comment reply to post {reddit_post_id}",
+            "success",
+        )
         return reply.id
     except Exception as e:
-        add_log("REDDIT_COMMENT_ERROR", f"Failed to post comment to post {reddit_post_id}: {str(e)}", "error")
+        add_log(
+            "REDDIT_COMMENT_ERROR",
+            f"Failed to post comment to post {reddit_post_id}: {str(e)}",
+            "error",
+        )
         print(f"[Reddit Outreach] Failed to post comment to post {reddit_post_id}: {e}")
         raise e
 
@@ -160,11 +309,21 @@ def fetch_unread_inbox_messages():
     """
     reddit = get_praw_client()
     if not reddit:
-        add_log("REDDIT_INBOX_ERROR", "Reddit PRAW API credentials not configured, cannot read inbox", "error")
-        raise ValueError("Reddit PRAW API credentials must be configured to read inbox messages.")
+        add_log(
+            "REDDIT_INBOX_ERROR",
+            "Reddit PRAW API credentials not configured, cannot read inbox",
+            "error",
+        )
+        raise ValueError(
+            "Reddit PRAW API credentials must be configured to read inbox messages."
+        )
 
     try:
         return list(reddit.inbox.unread(limit=None))
     except Exception as e:
-        add_log("REDDIT_INBOX_ERROR", f"Failed to read unread inbox messages: {str(e)}", "error")
+        add_log(
+            "REDDIT_INBOX_ERROR",
+            f"Failed to read unread inbox messages: {str(e)}",
+            "error",
+        )
         raise e

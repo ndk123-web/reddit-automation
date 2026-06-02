@@ -20,7 +20,9 @@ def get_outreach_queue(page, limit, db):
 
     items = (
         query.order_by(
-            func.coalesce(Outreach.scheduled_for, Outreach.next_action_at, Outreach.created_utc).asc(),
+            func.coalesce(
+                Outreach.scheduled_for, Outreach.next_action_at, Outreach.created_utc
+            ).asc(),
             Outreach.id.asc(),
         )
         .offset(skip)
@@ -75,7 +77,11 @@ def approve_outreach_queue_item(db, item_id):
         if not item.outreach_content:
             raise ValueError("Outreach content is empty; cannot send message.")
 
-        subject = "Discussion" if item.sequence_step in (None, "initial", "initial_sent") else "Following up"
+        subject = (
+            "Discussion"
+            if item.sequence_step in (None, "initial", "initial_sent")
+            else "Following up"
+        )
         send_reddit_dm(
             recipient=item.author_username,
             subject=subject,
