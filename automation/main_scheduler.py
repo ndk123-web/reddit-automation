@@ -13,8 +13,8 @@ scheduler = BlockingScheduler()
 # next_run_time=datetime.now() taaki script chalu hote hi pehla run turant trigger kare
 
 scheduler.add_job(run_monitor_worker, 'interval', minutes=2, max_instances=1, coalesce=True, next_run_time=datetime.now())
-# scheduler.add_job(run_outreach_worker, 'interval', minutes=1, max_instances=1, coalesce=True, next_run_time=datetime.now())
-# scheduler.add_job(run_reply_worker, 'interval', minutes=1, max_instances=1, coalesce=True, next_run_time=datetime.now())
+scheduler.add_job(run_outreach_worker, 'interval', minutes=1, max_instances=1, coalesce=True, next_run_time=datetime.now())
+scheduler.add_job(run_reply_worker, 'interval', minutes=1, max_instances=1, coalesce=True, next_run_time=datetime.now())
 
 if __name__ == "__main__":
     print("Scheduler is starting... Press Ctrl+C to stop.")
