@@ -133,7 +133,7 @@ def fetch_latest_posts(subreddit_name="startups", limit=5):
         )
         print(f"[Reddit Monitor] Fetching r/{subreddit_name} via JSON scraping")
         candidate_urls = [
-            f"https://www.reddit.com/r/{subreddit_name}/new.json?limit={limit}&raw_json=1",
+            f"  ",
             f"https://www.reddit.com/r/{subreddit_name}/new/.json?limit={limit}&raw_json=1",
             f"https://old.reddit.com/r/{subreddit_name}/new.json?limit={limit}&raw_json=1",
         ]
