@@ -1,4 +1,3 @@
-# AutoNova Pod 2 — Functional & Non-Functional Requirements
 
 # Project Overview
 
