@@ -1,5 +1,3 @@
-# AutoNova Pod 2 — Functional & Non-Functional Requirements
-
 # Project Overview
 
 Build an AI-powered Reddit outreach system that:
